@@ -12,8 +12,6 @@ public:
     TcpServer(EventLoop* loop, int port);
     ~TcpServer();
 
-    // 设置业务回调：收到完整消息时调用
-    void setMessageCallback(std::function<void(TcpConnection*, const std::string&)> cb);
     // 启动服务器（让 Acceptor 开始监听）
     void start();
 
@@ -29,7 +27,7 @@ private:
     EventLoop* _loop;
 
     std::unique_ptr<Acceptor> _acceptor;
-    std::map<int, std::unique_ptr<TcpConnection>> _connections;// 管理所有活跃连接，键是 conn_fd
+    std::map<int, std::shared_ptr<TcpConnection>> _connections;// 管理所有活跃连接，键是 conn_fd
 };
 
 #endif // TCPSERVER_H

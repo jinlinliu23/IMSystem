@@ -1,8 +1,11 @@
 #include "tcpconnection.h"
+#include "../utility/logicsystem.h"
+#include "networkconst.h"
 #include <cstring>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <iostream>
+
 
 TcpConnection::TcpConnection(EventLoop* loop, int conn_fd)
     : _loop(loop),
@@ -19,17 +22,16 @@ TcpConnection::TcpConnection(EventLoop* loop, int conn_fd)
 
 TcpConnection::~TcpConnection() {}
 
-void TcpConnection::setMessageCallback(std::function<void(TcpConnection*, const std::string&)> cb) {
-    _messageCallback = std::move(cb);
-}
-
 void TcpConnection::setCloseCallback(std::function<void()> cb) {
     _closeCallback = std::move(cb);
 }
 
-void TcpConnection::send(const std::string& msg) { //谁会调用它？
+void TcpConnection::send(const std::string& msgData) {//逻辑层调用
+    std::lock_guard<std::mutex> lock(_send_lock);
+    std::cerr<<"TcpConnection::send msgData size:"<<msgData.size()<<"\n";
+    std::cerr<<"msgData:"<<msgData<<"\n";
     // 1. 入队
-    _outputBuffer.append(msg.data(), msg.size());
+    _outputBuffer.append(msgData.data(), msgData.size());
     // 2. 确保写事件已注册，由 handleWrite 统一发送
     _channel->enableWriting();
 }
@@ -37,43 +39,51 @@ void TcpConnection::send(const std::string& msg) { //谁会调用它？
 void TcpConnection::handleRead() {//处理粘包
     char buf[4096];
     ssize_t n = read(_socket->getfd(), buf, sizeof(buf));
+    std::cerr<<"fd:"<<_socket->getfd()<<"TcpConnection::handleRead\n";
+    std::cerr<<"fd:"<<_socket->getfd()<<"n="<<n<<"\n";
     if (n > 0) {
         //将内核缓冲区的数据放入用户缓冲区
         _inputBuffer.append(buf, n);
         //处理_inputBuffer中的就绪数据
-        while(1){
-            // 1. 尝试按协议读包头 前4字节是长度
-            if (_inputBuffer.readableBytes() < 4) break;
-            // 2. 读出包体长度
-            uint32_t bodyLen_net = 0;
-            std::memcpy(&bodyLen_net, _inputBuffer.peek(), sizeof(bodyLen_net));
-            uint32_t bodyLen = ntohl(bodyLen_net);
+        while (true) {
+            // 1. 头部长度
+            if (_inputBuffer.readableBytes() < HEAD_TOTAL_LEN)
+                break;
 
-            // 3. 防止恶意超大包撑爆内存
-            // const uint32_t MAX_BODY_LEN = 10 * 1024 * 1024; // 例如 10MB
-            // if (bodyLen > MAX_BODY_LEN) {
-            //     handleClose();   // 协议异常，关闭连接
+            // 2. 解析头部
+            const char* header = _inputBuffer.peek();
+            short msgId = 0;
+            memcpy(&msgId, header, sizeof(msgId));
+            msgId = ntohs(msgId);
+            std::cerr<<"fd:"<<_socket->getfd()<<" "<<msgId<<"\n";
+
+            uint32_t msgLen = 0;
+            memcpy(&msgLen, header + HEAD_ID_LEN, sizeof(msgLen));
+            msgLen = ntohl(msgLen);
+            std::cerr<<"fd:"<<_socket->getfd()<<" "<<msgLen<<"\n";
+
+            // 3. 校验合法性
+            // if (msgId > MAX_LENGTH || msgLen > MAX_LENGTH) {
+            //     handleClose();
             //     return;
             // }
 
-            // 4. 检查包体是否完整到达
-            const size_t frameLen = sizeof(uint32_t) + bodyLen;
+            // 4. 检查整个帧是否接收完整
+            const size_t frameLen = HEAD_TOTAL_LEN + msgLen;
             if (_inputBuffer.readableBytes() < frameLen)
                 break;
-            // 5. 跳过包头，取出包体数据，形成一条完整消息；从缓冲区中移除此帧
-            std::string message(_inputBuffer.peek() + sizeof(uint32_t), bodyLen);
 
+            // 5. 取出消息体
+            std::string msgData(_inputBuffer.peek() + HEAD_TOTAL_LEN, msgLen);
+            // 6. 从缓冲区移除该帧
             _inputBuffer.retrieve(frameLen);
-            // 6. 交给业务逻辑层
-            if (_messageCallback) _messageCallback(this, message);
-        }
-        //查看输入缓冲区的字节大小，
-        // 目前极简处理：假设每次收到的就是一条完整消息
-        // 将来在这里添加协议解析
-        std::string msg(_inputBuffer.peek(), _inputBuffer.readableBytes());
-        _inputBuffer.retrieve(msg.size());
-        if (_messageCallback) {
-            _messageCallback(this, msg);
+
+            std::cerr<<"fd:"<<_socket->getfd()<<" "<<msgId<<" "<<msgLen;
+            // 7. 交付给逻辑层
+            std::shared_ptr<RecvNode> rn=std::make_shared<RecvNode>(msgLen,msgId);
+            std::memcpy(rn->_data,msgData.data(),msgLen);
+            std::shared_ptr<LogicNode> ln=std::make_shared<LogicNode>(shared_from_this(),rn);
+            LogicSystem::GetInstance()->PostMsgToQue(ln);
         }
     } else if (n == 0) {
         handleClose();
@@ -85,6 +95,7 @@ void TcpConnection::handleRead() {//处理粘包
 }
 
 void TcpConnection::handleWrite() {
+    std::lock_guard<std::mutex> lock(_send_lock);
     //如果输出缓冲区没有要输出的数据，则关闭可写监听
     if (_outputBuffer.readableBytes() == 0) {
         _channel->disableWriting();

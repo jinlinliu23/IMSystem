@@ -1,5 +1,6 @@
 #include "channel.h"
 #include "eventloop.h"
+#include <iostream>
 #include <sys/epoll.h>
 
 Channel::Channel(EventLoop *el,int fd)
@@ -52,6 +53,7 @@ void Channel::remove() {
 
 void Channel::update() {
     if (!_added) {
+        std::cerr<<"Channel::update() _fd:"<<_fd<<"向epoll注册节点";
         _el->addChannel(this);     // 第一次添加
         _added = true;
     } else {
@@ -73,6 +75,7 @@ void Channel::handleEvent(uint32_t revents) {
     }
     // 读事件
     if (revents & (EPOLLIN | EPOLLPRI)) {
+        std::cerr<<"Channel::handleEvent fd:"<<_fd<<"有可读事件\n";
         if (readCallback) readCallback();
     }
     // 写事件

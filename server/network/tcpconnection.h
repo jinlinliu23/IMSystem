@@ -5,8 +5,9 @@
 #include "eventloop.h"
 #include "socket.h"
 #include <memory>
+#include <mutex>
 #include <string>
-class TcpConnection
+class TcpConnection: public std::enable_shared_from_this<TcpConnection>
 {
 public:
     TcpConnection(EventLoop* loop, int conn_fd);
@@ -14,26 +15,24 @@ public:
 
     int fd() const { return _socket->getfd(); }
 
-    void setMessageCallback(std::function<void(TcpConnection*, const std::string&)> cb);
     void setCloseCallback(std::function<void()> cb);
 
     void send(const std::string& msg);   // 上层用这个来发送消息
-
-    // 暂时公开，后面可以设为 private，由 Channel 调用
-    void handleRead();
-    void handleWrite();
-    void handleClose();
 
 private:
     EventLoop* _loop;
     std::unique_ptr<Socket> _socket;
     std::unique_ptr<Channel> _channel;
+    std::mutex _send_lock;
 
     Buffer _inputBuffer;//输入缓冲区
     Buffer _outputBuffer;//输出缓冲区
 
-    std::function<void(TcpConnection*, const std::string&)> _messageCallback;
     std::function<void()> _closeCallback;
+private:
+    void handleRead();
+    void handleWrite();
+    void handleClose();
 };
 
 #endif // TCPCONNECTION_H

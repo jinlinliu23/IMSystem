@@ -17,9 +17,6 @@ TcpServer::~TcpServer() {
     _connections.clear();
 }
 
-void TcpServer::setMessageCallback(std::function<void(TcpConnection*, const std::string&)> cb) {
-    _messageCallback = std::move(cb);
-}
 
 void TcpServer::start() {
     _acceptor->listen();  // Acceptor 开始监听（内部注册 EPOLLIN）
@@ -28,10 +25,7 @@ void TcpServer::start() {
 
 void TcpServer::onNewConnection(int conn_fd) {
     // 创建 TcpConnection（构造时自动注册到 epoll）
-    auto conn = std::make_unique<TcpConnection>(_loop, conn_fd);
-
-    // 设置消息回调
-    conn->setMessageCallback(_messageCallback);
+    auto conn = std::make_shared<TcpConnection>(_loop, conn_fd);
 
     // 设置关闭回调：通知 TcpServer 删掉自己
     TcpConnection* raw_ptr = conn.get();
@@ -41,13 +35,13 @@ void TcpServer::onNewConnection(int conn_fd) {
 
     // 把连接加入管理列表
     _connections.emplace(conn_fd, std::move(conn));
-    std::cout << "New connection, fd=" << conn_fd
+    std::cerr << "New connection, fd=" << conn_fd
               << " total=" << _connections.size() << std::endl;
 }
 
 void TcpServer::onConnectionClose(TcpConnection* conn) {
     int fd = conn->fd();
-    std::cout << "Connection closed, fd=" << fd << std::endl;
-    // 从 map 中移除 -> unique_ptr 析构 -> TcpConnection 析构（自动清理 epoll 和 fd）
+    std::cerr << "Connection closed, fd=" << fd << std::endl;
+    // 从 map 中移除 -> shared_ptr 析构 -> TcpConnection 析构（自动清理 epoll 和 fd）
     _connections.erase(fd);
 }
