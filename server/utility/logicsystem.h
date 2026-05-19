@@ -1,6 +1,7 @@
 #pragma once
 
 #include "logicnode.h"
+#include "mesrout.h"
 #include "singleton.h"
 #include <condition_variable>
 #include <queue>
@@ -24,10 +25,13 @@ private:
     std::thread _worker_thread;
     //停止消息 在逻辑队列还有数据的情况下，及时处理数据。
     bool _b_stop;
-    std::map<short,FunCallBack> _fun_callacks;
 
-    void RegisterCallback();
-    void HelloWordCallback(std::shared_ptr<TcpConnection> tc,const short& msg_id,const std::string& msg_data);
+    //消息分发
+    MesRout _mesRout;
+    // std::map<short,FunCallBack> _fun_callacks;
+
+    // void RegisterCallback();
+    // void HelloWordCallback(std::shared_ptr<TcpConnection> tc,const short& msg_id,const std::string& msg_data);
     void DealMsg();//交给工作线程调用
 };
 

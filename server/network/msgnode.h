@@ -27,7 +27,7 @@ public:
 };
 
 class RecvNode :public MsgNode {
-    friend class LogicSystem;
+    friend class MesRout;
 public:
     RecvNode(uint32_t max_len, short msg_id);
 private:

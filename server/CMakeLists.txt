@@ -20,6 +20,9 @@ add_executable(server main.cpp
     utility/logicnode.h utility/logicnode.cpp
     network/networkconst.h
     utility/msgIdconst.h
+    utility/mesrout.h utility/mesrout.cpp
+    business/handler.h business/handler.cpp
+    business/echohandler.h business/echohandler.cpp
     )
 
 find_package(PkgConfig REQUIRED)

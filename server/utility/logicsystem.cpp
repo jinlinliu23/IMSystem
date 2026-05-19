@@ -1,11 +1,8 @@
 #include <json/json.h>
-#include <iostream>
 #include "logicsystem.h"
 #include "../network/msgnode.h"
-#include "msgIdconst.h"
 
 LogicSystem::LogicSystem():_b_stop(false) {
-    RegisterCallback();
     _worker_thread=std::thread(&LogicSystem::DealMsg,this);
 }
 
@@ -25,11 +22,11 @@ void LogicSystem::PostMsgToQue(std::shared_ptr<LogicNode> ln)
     }
 }
 
-void LogicSystem::RegisterCallback()
-{
-    _fun_callacks[static_cast<uint32_t>(MSG_IDS::MSG_HELLO_WORD)]=std::bind(&LogicSystem::HelloWordCallback,
-        this,std::placeholders::_1,std::placeholders::_2,std::placeholders::_3);
-}
+// void LogicSystem::RegisterCallback()
+// {
+//     _fun_callacks[static_cast<uint32_t>(MSG_IDS::MSG_HELLO_WORD)]=std::bind(&LogicSystem::HelloWordCallback,
+//         this,std::placeholders::_1,std::placeholders::_2,std::placeholders::_3);
+// }
 
 void LogicSystem::DealMsg()
 {
@@ -45,45 +42,35 @@ void LogicSystem::DealMsg()
         //如果为关闭状态 处理数据
         if(_b_stop){
             while(!_msg_que.empty()){
-                auto msg_node=_msg_que.front();
-                std::cout<<"recv msg id is "<<msg_node->_recvnode->_msg_id<<std::endl;
-                auto call_back_iter=_fun_callacks.find(msg_node->_recvnode->_msg_id);//找到对应回调函数
-                if(call_back_iter==_fun_callacks.end()){
-                    _msg_que.pop();
-                    continue;
-                }
-                call_back_iter->second(msg_node->_tcpconnection,msg_node->_recvnode->_msg_id,msg_node->_recvnode->_data);
+                std::shared_ptr<LogicNode> msg_node=_msg_que.front();
+                //交给消息分发 处理业务
+                _mesRout.RoutMessage(msg_node);
                 _msg_que.pop();
             }
         }
 
         //如果不是关闭状态
-        auto msg_node=_msg_que.front();
-        std::cout<<"recv msg id is "<<msg_node->_recvnode->_msg_id<<std::endl;
-        auto call_back_iter=_fun_callacks.find(msg_node->_recvnode->_msg_id);//找到对应回调函数
-        if(call_back_iter==_fun_callacks.end()){
-            _msg_que.pop();
-            continue;
-        }
-        call_back_iter->second(msg_node->_tcpconnection,msg_node->_recvnode->_msg_id,msg_node->_recvnode->_data);
+        std::shared_ptr<LogicNode> msg_node=_msg_que.front();
+        //交给消息分发 处理业务
+        _mesRout.RoutMessage(msg_node);
         _msg_que.pop();
     }
 }
 
-void LogicSystem::HelloWordCallback(std::shared_ptr<TcpConnection> tc,const short& msg_id,const std::string& msg_data)
-{
-    Json::Reader reader;
-    Json::Value root;
-    reader.parse(msg_data,root);
-    std::cout<<"recevive msg id is "<<root["id"].asInt()<<"msg data is "<<root["data"].asString()<<std::endl;
-    root["data"]="server has receive msg ,msg data is "+ root["data"].asString();
+// void LogicSystem::HelloWordCallback(std::shared_ptr<TcpConnection> tc,const short& msg_id,const std::string& msg_data)
+// {
+//     Json::Reader reader;
+//     Json::Value root;
+//     reader.parse(msg_data,root);
+//     std::cout<<"recevive msg id is "<<root["id"].asInt()<<"msg data is "<<root["data"].asString()<<std::endl;
+//     root["data"]="server has receive msg ,msg data is "+ root["data"].asString();
 
-    std::string return_str=root.toStyledString();
-    std::cerr<<"return_str:"<<return_str<<"\n";
-    std::cerr<<"return_str.size:"<<return_str.size()<<"\n";
-    //构建发送节点
-    std::shared_ptr<SendNode> sn=std::make_shared<SendNode>(return_str.data(),static_cast<uint32_t>(return_str.size()),root["id"].asInt());
+//     std::string return_str=root.toStyledString();
+//     std::cerr<<"return_str:"<<return_str<<"\n";
+//     std::cerr<<"return_str.size:"<<return_str.size()<<"\n";
+//     //构建发送节点
+//     std::shared_ptr<SendNode> sn=std::make_shared<SendNode>(return_str.data(),static_cast<uint32_t>(return_str.size()),root["id"].asInt());
 
-    //注意字节序
-    tc->send(std::string(sn->_data, sn->_total_len));
-}
+//     //注意字节序
+//     tc->send(std::string(sn->_data, sn->_total_len));
+// }

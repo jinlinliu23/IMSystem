@@ -5,7 +5,7 @@
 #include <memory>
 class LogicNode
 {
-    friend class LogicSystem;
+    friend class MesRout;
 public:
     LogicNode(std::shared_ptr<TcpConnection>,std::shared_ptr<RecvNode>);
 private:
