@@ -5,6 +5,7 @@ project(server LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(IM_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../common")
 
 add_executable(server main.cpp
     network/eventloop.h network/eventloop.cpp
@@ -21,14 +22,25 @@ add_executable(server main.cpp
     network/networkconst.h
     utility/msgIdconst.h
     utility/mesrout.h utility/mesrout.cpp
+    utility/passwordhash.h utility/passwordhash.cpp
     business/handler.h business/handler.cpp
-    business/echohandler.h business/echohandler.cpp
-    )
+    business/registerhandler.h business/registerhandler.cpp
+    business/loginhandler.h business/loginhandler.cpp
+    database/databasemanager.h database/databasemanager.cpp
+)
+
+target_include_directories(server PRIVATE ${IM_COMMON_DIR})
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(JSONCPP REQUIRED IMPORTED_TARGET jsoncpp)
+pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
+pkg_check_modules(OPENSSL REQUIRED IMPORTED_TARGET openssl)
 
-target_link_libraries(server PRIVATE PkgConfig::JSONCPP)
+target_link_libraries(server PRIVATE
+    PkgConfig::JSONCPP
+    PkgConfig::SQLITE3
+    PkgConfig::OPENSSL
+)
 
 include(GNUInstallDirs)
 install(TARGETS server

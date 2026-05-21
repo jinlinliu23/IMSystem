@@ -39,21 +39,15 @@ void LogicSystem::DealMsg()
             _consume.wait(unique_lk);//将线程挂起，并释放资源，进行解锁操作。
         }
 
-        //如果为关闭状态 处理数据
-        if(_b_stop){
-            while(!_msg_que.empty()){
-                std::shared_ptr<LogicNode> msg_node=_msg_que.front();
-                //交给消息分发 处理业务
-                _mesRout.RoutMessage(msg_node);
-                _msg_que.pop();
-            }
+        while (!_msg_que.empty()) {
+            std::shared_ptr<LogicNode> msg_node = _msg_que.front();
+            _mesRout.RoutMessage(msg_node);
+            _msg_que.pop();
         }
 
-        //如果不是关闭状态
-        std::shared_ptr<LogicNode> msg_node=_msg_que.front();
-        //交给消息分发 处理业务
-        _mesRout.RoutMessage(msg_node);
-        _msg_que.pop();
+        if (_b_stop) {
+            break;
+        }
     }
 }
 

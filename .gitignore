@@ -1,2 +1,4 @@
 server/build/
 server/.qtcreator/
+client/build/
+client/.qtcreator/

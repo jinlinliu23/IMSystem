@@ -11,7 +11,7 @@ public:
     void RoutMessage(std::shared_ptr<LogicNode>);
 
 private:
-    void RegisterHandler();//处理器注册
+    void initHandlers();//处理器注册
     std::map<short,std::shared_ptr<Handler>> _fun_Handlers;
 };
 
