@@ -16,6 +16,8 @@ public:
         TitleRole,
         LastMessageRole,
         TimeRole,
+        IsGroupRole,
+        GroupIdRole,
     };
 
     explicit ConversationListModel(QObject *parent = nullptr);
@@ -26,6 +28,7 @@ public:
 
     void setConversations(const QVector<QVariantMap> &rows);
     void updatePreview(const QString &peerAccount, const QString &lastMessage, const QString &time);
+    void upsertGroupConversation(qint64 groupId, const QString &title);
     QString lastMessageOf(const QString &peerAccount) const;
     QString timeOf(const QString &peerAccount) const;
     void clear();
@@ -37,6 +40,8 @@ private:
         QString title;
         QString lastMessage;
         QString time;
+        bool isGroup = false;
+        qint64 groupId = 0;
     };
 
     QVector<Item> items_;

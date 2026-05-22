@@ -4,10 +4,12 @@
 #include "model/conversationlistmodel.h"
 #include "model/currentusermodel.h"
 #include "model/friendrequestlistmodel.h"
+#include "model/grouplistmodel.h"
 #include "model/messagelistmodel.h"
 
 #include <QObject>
 #include <QString>
+#include <QVariantList>
 
 class ClientSettings;
 class ClientMessageRouter;
@@ -15,6 +17,7 @@ class AuthService;
 class ChatService;
 class ContactService;
 class GroupService;
+class GroupListModel;
 
 class ClientFacade : public QObject
 {
@@ -30,7 +33,10 @@ class ClientFacade : public QObject
     Q_PROPERTY(ContactListModel *contacts READ contacts CONSTANT)
     Q_PROPERTY(FriendRequestListModel *friendRequests READ friendRequests CONSTANT)
     Q_PROPERTY(int pendingFriendRequestCount READ pendingFriendRequestCount NOTIFY pendingFriendRequestCountChanged)
+    Q_PROPERTY(int pendingGroupInviteCount READ pendingGroupInviteCount CONSTANT)
+    Q_PROPERTY(int notificationCount READ notificationCount NOTIFY notificationCountChanged)
     Q_PROPERTY(MessageListModel *messages READ messages CONSTANT)
+    Q_PROPERTY(GroupListModel *groups READ groups CONSTANT)
 
 public:
     explicit ClientFacade(QObject *parent = nullptr);
@@ -46,7 +52,10 @@ public:
     ContactListModel *contacts() const { return contacts_; }
     FriendRequestListModel *friendRequests() const { return friendRequests_; }
     int pendingFriendRequestCount() const;
+    int pendingGroupInviteCount() const { return 0; }
+    int notificationCount() const;
     MessageListModel *messages() const { return messages_; }
+    GroupListModel *groups() const { return groups_; }
 
     void setServerHost(const QString &host);
     void setServerPort(int port);
@@ -68,6 +77,9 @@ public:
     Q_INVOKABLE void resumeSession();
     Q_INVOKABLE void openChat(const QString &peerAccount, const QString &peerTitle);
     Q_INVOKABLE void sendPrivateMessage(const QString &content);
+    Q_INVOKABLE void createGroup(const QString &name, const QStringList &memberAccounts);
+    Q_INVOKABLE void refreshMyGroups();
+    Q_INVOKABLE void fetchGroupInfo(qint64 groupId);
 
 signals:
     void isLoggedInChanged();
@@ -87,7 +99,15 @@ signals:
     void rejectFriendFinished(bool success, const QString &message);
     void friendNotify(const QString &message);
     void pendingFriendRequestCountChanged();
+    void notificationCountChanged();
     void conversationsUpdated();
+    void createGroupFinished(bool success, const QString &message, qint64 groupId);
+    void groupListUpdated();
+    void groupInfoLoaded(bool success,
+                         const QString &message,
+                         qint64 groupId,
+                         const QString &name,
+                         const QVariantList &members);
     void sendMessageFinished(bool success, const QString &message);
     void chatHistoryLoaded();
 
@@ -99,6 +119,7 @@ private:
     ContactListModel *contacts_ = nullptr;
     FriendRequestListModel *friendRequests_ = nullptr;
     MessageListModel *messages_ = nullptr;
+    GroupListModel *groups_ = nullptr;
     AuthService *authService_ = nullptr;
     ChatService *chatService_ = nullptr;
     ContactService *contactService_ = nullptr;

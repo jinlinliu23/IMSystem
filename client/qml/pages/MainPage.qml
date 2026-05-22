@@ -7,8 +7,8 @@ Item {
     property var t: appWindow.theme
     property int curTab: 0
 
-    readonly property int pendingRequestCount:
-        (typeof ClientFacade !== "undefined") ? ClientFacade.pendingFriendRequestCount : 0
+    readonly property int notificationCount:
+        (typeof ClientFacade !== "undefined") ? ClientFacade.notificationCount : 0
 
     MessagesPage {
         id: messagesPage
@@ -83,7 +83,7 @@ Item {
                         height: 8
                         radius: 4
                         color: "#e74c3c"
-                        visible: modelData.showBadge && pendingRequestCount > 0
+                        visible: modelData.showBadge && notificationCount > 0
                         anchors.left: tabLabel.right
                         anchors.leftMargin: 2
                         anchors.top: tabLabel.top

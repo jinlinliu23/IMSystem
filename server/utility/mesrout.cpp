@@ -5,6 +5,7 @@
 #include "../business/friendhandler.h"
 #include "../business/searchuserhandler.h"
 #include "../business/privatechathandler.h"
+#include "../business/grouphandler.h"
 
 MesRout::MesRout()
 {
@@ -38,4 +39,12 @@ void MesRout::initHandlers()
     _fun_Handlers[static_cast<uint32_t>(MSG_IDS::MSG_FRIEND_REJECT)] =
         std::make_shared<RejectFriendRequestHandler>();
     _fun_Handlers[static_cast<uint32_t>(MSG_IDS::MSG_FRIEND_LIST)] = std::make_shared<FriendListHandler>();
+    _fun_Handlers[static_cast<uint32_t>(MSG_IDS::MSG_CREATE_GROUP)] =
+        std::make_shared<CreateGroupHandler>();
+    _fun_Handlers[static_cast<uint32_t>(MSG_IDS::MSG_GROUP_LIST)] =
+        std::make_shared<GroupListHandler>();
+    _fun_Handlers[static_cast<uint32_t>(MSG_IDS::MSG_GROUP_INFO)] =
+        std::make_shared<GroupInfoHandler>();
+    _fun_Handlers[static_cast<uint32_t>(MSG_IDS::MSG_SEND_GROUP)] =
+        std::make_shared<SendGroupMessageHandler>();
 }

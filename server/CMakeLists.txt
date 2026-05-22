@@ -33,6 +33,7 @@ add_executable(server main.cpp
     business/searchuserhandler.h business/searchuserhandler.cpp
     business/friendhandler.h business/friendhandler.cpp
     business/privatechathandler.h business/privatechathandler.cpp
+    business/grouphandler.h business/grouphandler.cpp
     database/databasemanager.h database/databasemanager.cpp
 )
 

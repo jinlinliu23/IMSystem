@@ -27,6 +27,8 @@ set(CLIENT_SOURCES
     cpp/model/currentusermodel.cpp
     cpp/model/conversationlistmodel.h
     cpp/model/conversationlistmodel.cpp
+    cpp/model/grouplistmodel.h
+    cpp/model/grouplistmodel.cpp
     cpp/model/contactlistmodel.h
     cpp/model/contactlistmodel.cpp
     cpp/model/friendrequestlistmodel.h
@@ -62,6 +64,8 @@ qt_add_qml_module(appclient
         QML_FILES qml/pages/ChatPage.qml
         QML_FILES qml/pages/AddFriendPage.qml
         QML_FILES qml/pages/FriendRequestsPage.qml
+        QML_FILES qml/pages/CreateGroupPage.qml
+        QML_FILES qml/pages/GroupInfoPage.qml
 )
 
 set_target_properties(appclient PROPERTIES

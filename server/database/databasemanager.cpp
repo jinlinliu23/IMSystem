@@ -207,7 +207,10 @@ bool DatabaseManager::ensureSchema()
     if (!ensureOfflineMessagesSchema()) {
         return false;
     }
-    return ensurePrivateMessagesSchema();
+    if (!ensurePrivateMessagesSchema()) {
+        return false;
+    }
+    return ensureGroupSchema();
 }
 
 bool DatabaseManager::ensureFriendSchema()
@@ -301,6 +304,42 @@ bool DatabaseManager::ensurePrivateMessagesSchema()
     }
 
     std::cout << "DatabaseManager: private_messages table ready" << std::endl;
+    return true;
+}
+
+bool DatabaseManager::ensureGroupSchema()
+{
+    if (tableExists(db_, "groups") && tableExists(db_, "group_members")) {
+        return true;
+    }
+
+    const char *sql = R"SQL(
+        CREATE TABLE IF NOT EXISTS groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            owner_user_id INTEGER NOT NULL,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (owner_user_id) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS group_members (
+            group_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            role TEXT NOT NULL DEFAULT 'member',
+            joined_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            PRIMARY KEY (group_id, user_id),
+            FOREIGN KEY (group_id) REFERENCES groups(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_group_members_user
+            ON group_members(user_id);
+    )SQL";
+
+    if (!execSql(db_, sql)) {
+        return false;
+    }
+
+    execSql(db_, "PRAGMA user_version = 6;");
+    std::cout << "DatabaseManager: groups / group_members tables ready" << std::endl;
     return true;
 }
 
@@ -767,4 +806,172 @@ std::optional<int64_t> DatabaseManager::getPrivateMessageCreatedAt(int64_t messa
     const int64_t ts = sqlite3_column_int64(stmt, 0);
     sqlite3_finalize(stmt);
     return ts;
+}
+
+bool DatabaseManager::groupExists(int64_t groupId)
+{
+    const char *sql = "SELECT 1 FROM groups WHERE id = ? LIMIT 1;";
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+    sqlite3_bind_int64(stmt, 1, groupId);
+    const bool exists = sqlite3_step(stmt) == SQLITE_ROW;
+    sqlite3_finalize(stmt);
+    return exists;
+}
+
+bool DatabaseManager::isGroupMember(int64_t groupId, int64_t userId)
+{
+    const char *sql =
+        "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? LIMIT 1;";
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return false;
+    }
+    sqlite3_bind_int64(stmt, 1, groupId);
+    sqlite3_bind_int64(stmt, 2, userId);
+    const bool member = sqlite3_step(stmt) == SQLITE_ROW;
+    sqlite3_finalize(stmt);
+    return member;
+}
+
+std::optional<int64_t> DatabaseManager::createGroup(const std::string &name,
+                                                    int64_t ownerUserId,
+                                                    const std::vector<int64_t> &memberUserIds)
+{
+    if (!execSql(db_, "BEGIN IMMEDIATE;")) {
+        return std::nullopt;
+    }
+
+    const char *insertGroupSql =
+        "INSERT INTO groups (name, owner_user_id) VALUES (?, ?);";
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, insertGroupSql, -1, &stmt, nullptr) != SQLITE_OK) {
+        execSql(db_, "ROLLBACK;");
+        return std::nullopt;
+    }
+    sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmt, 2, ownerUserId);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        sqlite3_finalize(stmt);
+        execSql(db_, "ROLLBACK;");
+        return std::nullopt;
+    }
+    sqlite3_finalize(stmt);
+
+    const int64_t groupId = sqlite3_last_insert_rowid(db_);
+
+    const char *insertMemberSql =
+        "INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, ?);";
+
+    auto insertMember = [&](int64_t userId, const char *role) -> bool {
+        if (sqlite3_prepare_v2(db_, insertMemberSql, -1, &stmt, nullptr) != SQLITE_OK) {
+            return false;
+        }
+        sqlite3_bind_int64(stmt, 1, groupId);
+        sqlite3_bind_int64(stmt, 2, userId);
+        sqlite3_bind_text(stmt, 3, role, -1, SQLITE_TRANSIENT);
+        const bool ok = sqlite3_step(stmt) == SQLITE_DONE;
+        sqlite3_finalize(stmt);
+        return ok;
+    };
+
+    if (!insertMember(ownerUserId, "owner")) {
+        execSql(db_, "ROLLBACK;");
+        return std::nullopt;
+    }
+
+    for (const int64_t memberId : memberUserIds) {
+        if (memberId == ownerUserId) {
+            continue;
+        }
+        if (!insertMember(memberId, "member")) {
+            execSql(db_, "ROLLBACK;");
+            return std::nullopt;
+        }
+    }
+
+    if (!execSql(db_, "COMMIT;")) {
+        execSql(db_, "ROLLBACK;");
+        return std::nullopt;
+    }
+    return groupId;
+}
+
+std::vector<GroupSummaryRecord> DatabaseManager::listMyGroups(int64_t userId)
+{
+    std::vector<GroupSummaryRecord> result;
+    const char *sql = R"SQL(
+        SELECT g.id, g.name, COUNT(gm.user_id) AS member_count
+        FROM groups g
+        INNER JOIN group_members self ON self.group_id = g.id AND self.user_id = ?
+        INNER JOIN group_members gm ON gm.group_id = g.id
+        GROUP BY g.id
+        ORDER BY g.id DESC;
+    )SQL";
+
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return result;
+    }
+    sqlite3_bind_int64(stmt, 1, userId);
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        GroupSummaryRecord row;
+        row.groupId = sqlite3_column_int64(stmt, 0);
+        row.name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
+        row.memberCount = sqlite3_column_int(stmt, 2);
+        result.push_back(std::move(row));
+    }
+    sqlite3_finalize(stmt);
+    return result;
+}
+
+std::optional<GroupInfoRecord> DatabaseManager::getGroupInfo(int64_t groupId, int64_t userId)
+{
+    if (!groupExists(groupId)) {
+        return std::nullopt;
+    }
+    if (!isGroupMember(groupId, userId)) {
+        return std::nullopt;
+    }
+
+    GroupInfoRecord info;
+    info.groupId = groupId;
+    info.dissolved = false;
+
+    const char *nameSql = "SELECT name FROM groups WHERE id = ? LIMIT 1;";
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, nameSql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return std::nullopt;
+    }
+    sqlite3_bind_int64(stmt, 1, groupId);
+    if (sqlite3_step(stmt) != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        return std::nullopt;
+    }
+    info.name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+    sqlite3_finalize(stmt);
+
+    const char *membersSql = R"SQL(
+        SELECT u.account, u.nickname, gm.role
+        FROM group_members gm
+        JOIN users u ON u.id = gm.user_id
+        WHERE gm.group_id = ?
+        ORDER BY CASE gm.role WHEN 'owner' THEN 0 ELSE 1 END, u.account ASC;
+    )SQL";
+
+    if (sqlite3_prepare_v2(db_, membersSql, -1, &stmt, nullptr) != SQLITE_OK) {
+        return std::nullopt;
+    }
+    sqlite3_bind_int64(stmt, 1, groupId);
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        GroupMemberDetail m;
+        m.account = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+        m.nickname = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
+        m.role = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
+        info.members.push_back(std::move(m));
+    }
+    sqlite3_finalize(stmt);
+    return info;
 }

@@ -119,10 +119,14 @@ Item {
 
             TapHandler {
                 id: listTap
-                onTapped: n.push("ChatPage", {
-                    target: model.name,
-                    peerAccount: model.peerAccount || model.conversationId
-                })
+                onTapped: {
+                    n.push("ChatPage", {
+                        target: model.name,
+                        peerAccount: model.peerAccount || model.conversationId,
+                        isGroup: model.isGroup,
+                        groupId: model.groupId
+                    })
+                }
             }
         }
 
@@ -171,7 +175,7 @@ Item {
                     gesturePolicy: TapHandler.WithinBounds
                     onTapped: {
                         contextMenu.visible = false
-                        console.log("创建群聊")
+                        n.push("CreateGroupPage")
                     }
                 }
             }

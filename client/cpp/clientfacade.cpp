@@ -6,6 +6,7 @@
 #include "model/currentusermodel.h"
 #include "model/friendrequestlistmodel.h"
 #include "model/messagelistmodel.h"
+#include "model/grouplistmodel.h"
 #include "network/clientmessagerouter.h"
 #include "service/authservice.h"
 #include "service/chatservice.h"
@@ -23,6 +24,7 @@ ClientFacade::ClientFacade(QObject *parent)
     , contacts_(new ContactListModel(this))
     , friendRequests_(new FriendRequestListModel(this))
     , messages_(new MessageListModel(this))
+    , groups_(new GroupListModel(this))
     , authService_(new AuthService(settings_, currentUser_, router_, this))
     , chatService_(new ChatService(settings_, currentUser_, router_, conversations_, messages_, this))
     , contactService_(new ContactService(settings_,
@@ -32,7 +34,12 @@ ClientFacade::ClientFacade(QObject *parent)
                                          friendRequests_,
                                          conversations_,
                                          this))
-    , groupService_(new GroupService(router_, this))
+    , groupService_(new GroupService(settings_,
+                                     currentUser_,
+                                     router_,
+                                     groups_,
+                                     conversations_,
+                                     this))
 {
     currentUser_->loadFromSettings(settings_);
     if (currentUser_->loggedIn() && chatService_) {
@@ -66,8 +73,20 @@ ClientFacade::ClientFacade(QObject *parent)
     connect(contactService_, &ContactService::acceptFriendFinished, this, &ClientFacade::acceptFriendFinished);
     connect(contactService_, &ContactService::rejectFriendFinished, this, &ClientFacade::rejectFriendFinished);
     connect(contactService_, &ContactService::friendNotify, this, &ClientFacade::friendNotify);
-    connect(contactService_, &ContactService::friendRequestsUpdated, this, &ClientFacade::pendingFriendRequestCountChanged);
-    connect(friendRequests_, &FriendRequestListModel::pendingCountChanged, this, &ClientFacade::pendingFriendRequestCountChanged);
+    connect(contactService_, &ContactService::friendRequestsUpdated, this, [this]() {
+        emit pendingFriendRequestCountChanged();
+        emit notificationCountChanged();
+    });
+    connect(friendRequests_, &FriendRequestListModel::pendingCountChanged, this, [this]() {
+        emit pendingFriendRequestCountChanged();
+        emit notificationCountChanged();
+    });
+    connect(groupService_, &GroupService::createGroupFinished, this, &ClientFacade::createGroupFinished);
+    connect(groupService_, &GroupService::groupListUpdated, this, [this]() {
+        emit groupListUpdated();
+        emit conversationsUpdated();
+    });
+    connect(groupService_, &GroupService::groupInfoLoaded, this, &ClientFacade::groupInfoLoaded);
     connect(contactService_, &ContactService::conversationsUpdated, this, [this]() {
         if (chatService_) {
             chatService_->mergeLocalPreviewsIntoConversations();
@@ -197,6 +216,9 @@ void ClientFacade::onAuthSessionReady()
     if (contactService_) {
         contactService_->syncAfterLogin();
     }
+    if (groupService_) {
+        groupService_->refreshMyGroupsDeferred();
+    }
 }
 
 void ClientFacade::resumeSession()
@@ -230,6 +252,9 @@ void ClientFacade::logout()
     if (chatService_) {
         chatService_->clearSession();
     }
+    if (groupService_) {
+        groupService_->clearLocalData();
+    }
     if (contactService_) {
         contactService_->clearLocalData();
     }
@@ -241,4 +266,30 @@ void ClientFacade::logout()
 int ClientFacade::pendingFriendRequestCount() const
 {
     return friendRequests_ ? friendRequests_->pendingCount() : 0;
+}
+
+int ClientFacade::notificationCount() const
+{
+    return pendingFriendRequestCount() + pendingGroupInviteCount();
+}
+
+void ClientFacade::createGroup(const QString &name, const QStringList &memberAccounts)
+{
+    if (groupService_) {
+        groupService_->createGroup(name, memberAccounts);
+    }
+}
+
+void ClientFacade::refreshMyGroups()
+{
+    if (groupService_) {
+        groupService_->refreshMyGroups();
+    }
+}
+
+void ClientFacade::fetchGroupInfo(qint64 groupId)
+{
+    if (groupService_) {
+        groupService_->fetchGroupInfo(groupId);
+    }
 }

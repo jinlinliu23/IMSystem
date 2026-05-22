@@ -37,8 +37,18 @@ enum class MSG_IDS : uint16_t {
     MSG_PRIVATE_HISTORY = 1303,     ///< 已废弃：历史由客户端本地 SQLite 保存
     MSG_PRIVATE_HISTORY_RSP = 1304,
 
-    MSG_NOTIFY_FRIEND = 1412,   ///< 服务端推送：好友相关通知（离线落库）
-    MSG_NOTIFY_GROUP = 1502,    ///< 服务端推送：群消息
+    MSG_NOTIFY_FRIEND = 1412,      ///< 服务端推送：好友相关通知（离线落库）
+    MSG_NOTIFY_GROUP = 1502,       ///< 服务端推送：群消息
+    MSG_NOTIFY_GROUP_EVENT = 1503, ///< 服务端推送：群事件（离线落库）
+
+    MSG_CREATE_GROUP = 1500,
+    MSG_CREATE_GROUP_RSP = 1501,
+    MSG_GROUP_LIST = 1520,
+    MSG_GROUP_LIST_RSP = 1521,
+    MSG_GROUP_INFO = 1530,
+    MSG_GROUP_INFO_RSP = 1531,
+    MSG_SEND_GROUP = 1550,
+    MSG_SEND_GROUP_RSP = 1551,
 };
 
 /** 业务层 JSON 字段 code 的取值（注册/登录等通用） */
@@ -54,4 +64,10 @@ enum class API_CODE : int {
     CANNOT_ADD_SELF = 8, ///< 不能添加自己
     NOT_FRIEND = 9,      ///< 非好友，无法发私聊
     ALREADY_ONLINE = 10, ///< 账号已在其它设备登录
+
+    GROUP_NOT_FOUND = 11,
+    NOT_GROUP_MEMBER = 12,
+    ALREADY_IN_GROUP = 13,
+    GROUP_DISSOLVED = 14,
+    NOT_YOUR_FRIEND = 15,
 };

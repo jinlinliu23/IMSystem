@@ -31,6 +31,10 @@ QVariant ConversationListModel::data(const QModelIndex &index, int role) const
         return item.lastMessage;
     case TimeRole:
         return item.time;
+    case IsGroupRole:
+        return item.isGroup;
+    case GroupIdRole:
+        return item.groupId;
     default:
         return {};
     }
@@ -44,6 +48,8 @@ QHash<int, QByteArray> ConversationListModel::roleNames() const
         {TitleRole, "name"},
         {LastMessageRole, "last"},
         {TimeRole, "time"},
+        {IsGroupRole, "isGroup"},
+        {GroupIdRole, "groupId"},
     };
 }
 
@@ -59,6 +65,8 @@ void ConversationListModel::setConversations(const QVector<QVariantMap> &rows)
         item.title = row.value(QStringLiteral("title")).toString();
         item.lastMessage = row.value(QStringLiteral("lastMessage")).toString();
         item.time = row.value(QStringLiteral("time")).toString();
+        item.isGroup = row.value(QStringLiteral("isGroup")).toBool();
+        item.groupId = row.value(QStringLiteral("groupId")).toLongLong();
         items_.append(item);
     }
     endResetModel();
@@ -98,6 +106,29 @@ QString ConversationListModel::timeOf(const QString &peerAccount) const
         }
     }
     return {};
+}
+
+void ConversationListModel::upsertGroupConversation(qint64 groupId, const QString &title)
+{
+    const QString convId = QStringLiteral("g:%1").arg(groupId);
+    for (int i = 0; i < items_.size(); ++i) {
+        if (items_.at(i).groupId == groupId) {
+            items_[i].title = title;
+            const QModelIndex idx = index(i);
+            emit dataChanged(idx, idx, {TitleRole});
+            return;
+        }
+    }
+
+    beginInsertRows(QModelIndex(), items_.size(), items_.size());
+    Item item;
+    item.conversationId = convId;
+    item.peerAccount = convId;
+    item.title = title;
+    item.isGroup = true;
+    item.groupId = groupId;
+    items_.append(item);
+    endInsertRows();
 }
 
 void ConversationListModel::clear()

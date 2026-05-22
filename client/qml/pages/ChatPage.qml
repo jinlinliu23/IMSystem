@@ -9,6 +9,8 @@ Page {
     property var theme: appWindow.theme
     property string target: ""
     property string peerAccount: ""
+    property bool isGroup: false
+    property int groupId: 0
 
     readonly property color colorMyBubble: "#4A90D9"
     readonly property color colorMyText: "white"

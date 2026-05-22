@@ -1,76 +1,104 @@
 # IMSystem
 
-即时通讯课程项目：注册、登录、单聊、群聊。
+即时通讯（IM）课程项目：C++ 自研 TCP 服务端 + Qt6 Quick 客户端。
 
-## 数据库说明
+> **详细开发文档**（架构、协议草案、群聊分阶段计划、代码索引）：见 [`PROJECT_STATUS.md`](PROJECT_STATUS.md)。
 
-- **类型**：服务端内嵌 **SQLite**（不是单独安装的 MySQL/PostgreSQL）
-- **文件**：`server/data/im.db`（首次运行 `server` 时自动创建目录和表）
-- **表**：`users`（id, **username=账号**（唯一）, **nickname=昵称**, password_hash, salt, created_at）
-- **查看数据**：`sqlite3 server/data/im.db "SELECT id, username, nickname FROM users;"`
+---
 
-客户端 `QSettings` 只保存服务器 IP/端口，**不存用户数据库**。
+## 功能概览
 
-## 消息协议（当前仅注册）
-
-**传输**：TCP 端口 `16701`，每帧 = 6 字节头 + JSON 体。
-
-| 字段 | 长度 | 说明 |
+| 模块 | 状态 | 说明 |
 |------|------|------|
-| msg_id | 2 | 大端 uint16，见 `common/msg_ids.h` |
-| body_len | 4 | 大端 uint32 |
-| body | N | UTF-8 JSON |
+| 注册 / 登录 | ✅ | 1100/1101、1200/1201；密码盐 + OpenSSL |
+| 好友 | ✅ | 搜索、申请、同意/拒绝、列表；1412 推送 |
+| 单聊 | ✅ | 1300/1301 发送，1302 推送/离线；聊天记录仅存客户端 |
+| 单端在线 | ✅ | 同账号仅允许一台设备登录（`ALREADY_ONLINE`） |
+| 群聊 | 🚧 第一阶段进行中 | 已完成群创建 / 群列表 / 群详情的基础接入；群消息收发与离线通知仍在完善中，详见 `PROJECT_STATUS.md` |
 
-**注册请求** `msg_id = 1100`：
+**业务规则**：先加好友再私聊；群邀请仅能邀请自己的好友；已是群成员不可重复加群（群聊实现后生效）。
 
-```json
-{"username":"alice","password":"secret123","nickname":"爱丽丝"}
+---
+
+## 架构摘要
+
 ```
-（`username` 即用户填写的**账号**，全站唯一且**区分大小写**；`nickname` 为**昵称**展示名）
+客户端：QML → ClientFacade → Auth / Contact / Chat / Group* → ClientMessageRouter → TcpClient
+                              ↘ ChatLocalStore（Qt Sql，本地 sqlite 文件）
 
-**注册响应** `msg_id = 1101`：
-
-```json
-{"code":0,"msg":"注册成功","user_id":1}
-```
-
-`code`：0 成功，1 账号已被注册，2 参数错误，3 数据库错误，4 账号或密码错误。
-
-**登录请求** `msg_id = 1200`：
-
-```json
-{"username":"alice","password":"secret123"}
+服务端：TcpConnection → MesRout → Handler → DatabaseManager（im.db）
+        OnlineUsersManager + MessageDispatcher（在线推送 + offline_messages）
 ```
 
-**登录响应** `msg_id = 1201`：
+TCP **16701**，帧格式：`[uint16 msg_id][uint32 len][UTF-8 JSON]`，定义见 `common/msg_ids.h`。
 
-```json
-{"code":0,"msg":"登录成功","user_id":1,"username":"alice","nickname":"爱丽丝"}
+\* `GroupService` 已接入群创建 / 群列表 / 群详情，后续继续补群消息收发与离线投递。
+
+---
+
+## 存储
+
+| 位置 | 内容 |
+|------|------|
+| `server/data/im.db` | 用户、好友关系、`offline_messages`（含 `group_id` 字段） |
+| 客户端 QSettings | 服务器地址、当前登录账号、`session_password`（用于启动时 `resumeSession`） |
+| 客户端本地 | `AppDataLocation/chat_<账号>.sqlite`（Qt **QSQLITE** 驱动） |
+
+- **聊天历史**：私聊（及规划中的群聊）**只存客户端**；服务端不保存聊天内容表。
+- **离线消息**：未送达写入 `offline_messages`，登录或 `resumeSession` 后 flush 为 1302/1502/1503 推送（群事件也走离线队列）。
+
+查看服务端用户示例：
+
+```bash
+sqlite3 server/data/im.db "SELECT id, account, nickname FROM users;"
 ```
 
-登录成功后客户端将 `user_id` / `username` / `nickname` 写入 `QSettings`，下次启动直达主页。
+---
 
-### 好友（进行中）
+## 消息协议摘要
 
-**搜索用户** `msg_id = 1400`（需已登录，用于添加好友前查找）：
+完整 ID 与错误码以 `common/msg_ids.h` 为准。
+
+| 范围 | 用途 |
+|------|------|
+| 1100–1101 | 注册 |
+| 1200–1201 | 登录 |
+| 1300–1302 | 私聊（发 / 响应 / 推送） |
+| 1400–1431 | 好友 |
+| 1412 | 好友事件推送 |
+| 1500–1555 | 群聊（阶段 1 已实现创建 / 列表 / 详情，后续继续补消息与邀请） |
+| 1502 | 群消息推送（已预留，Handler 待补） |
+| 1503 | 群事件推送（建群 / 退群 / 解散，离线可投递） |
+
+**API_CODE（常用）**：0 成功；4 认证失败；9 非好友；10 已在其它设备登录。群聊扩展码 11–15 见 `PROJECT_STATUS.md`。
+
+### 注册 / 登录示例
+
+注册 `1100`：
 
 ```json
-{"from_user_id":1,"username":"bob"}
+{"account":"alice","password":"secret123","nickname":"爱丽丝"}
 ```
 
-**搜索响应** `msg_id = 1401`：
+登录 `1200`：
 
 ```json
-{"code":0,"msg":"ok","user":{"user_id":2,"username":"bob","nickname":"鲍勃"}}
+{"account":"alice","password":"secret123"}
 ```
 
-`code` 扩展：5 用户不存在，8 不能添加自己。
+登录成功 `1201`：
 
-数据库（`user_version >= 3`）：`friend_requests`、`friendships` 表已创建，发送/接受申请在后续步骤实现。
+```json
+{"code":0,"msg":"登录成功","user_id":1,"account":"alice","nickname":"爱丽丝"}
+```
 
-单聊消息 ID 尚未实现，见 `common/msg_ids.h`。
+客户端将登录态写入 QSettings；下次启动若已登录则调用 `resumeSession()` 向服务端重新 1200 并拉取离线消息。
 
-## 服务端
+---
+
+## 构建与运行
+
+### 服务端
 
 依赖：jsoncpp、sqlite3、openssl（pkg-config）。
 
@@ -81,19 +109,12 @@ cmake --build build
 ./build/server
 ```
 
-- 监听端口：**16701**
-- SQLite 数据库：`server/data/im.db`（首次运行自动建表）
+- 监听：**16701**
+- 数据库：首次运行自动创建 `server/data/im.db`
 
-### 注册协议
+### 客户端
 
-| 方向 | msg_id | JSON |
-|------|--------|------|
-| 客户端 → 服务端 | 1100 | `{"username","password","nickname"}` |
-| 服务端 → 客户端 | 1101 | `{"code":0,"msg":"...","user_id":1}` |
-
-`code`: 0 成功，1 用户名已存在，2 参数错误，3 数据库/内部错误。
-
-## 客户端
+推荐 **Qt Creator**（Qt 6.10+）：模块 **Quick**、**Network**、**Sql**。
 
 ```bash
 cd client
@@ -102,11 +123,44 @@ cmake --build build
 ./build/appclient
 ```
 
-- 桌面默认连接 `127.0.0.1:16701`
-- Android 模拟器默认 `10.0.2.2:16701`；真机请改为电脑局域网 IP：
+| 环境 | 默认服务器地址 |
+|------|----------------|
+| 桌面 | `127.0.0.1:16701` |
+| Android 模拟器 | `10.0.2.2:16701` |
+| Android 真机 | 电脑局域网 IP，可在 QML 中设置 `ClientFacade.serverHost` |
 
-```qml
-ClientFacade.serverHost = "192.168.x.x"
-```
+修改 `CMakeLists.txt` 或 Qt 模块后请在 Qt Creator 中 **重新运行 CMake** 再构建。
 
-真机调试需在 Android 清单中允许网络（Qt 工程一般已包含 `INTERNET` 权限）。
+---
+
+## 客户端页面
+
+| 页面 | 说明 |
+|------|------|
+| Login / Register | 登录注册 |
+| Main（消息 / 联系人 / 我） | 主页 Tab |
+| Messages | 会话列表；「+」添加好友 / 创建群聊；群会话可进入群聊天页 |
+| Chat | 私聊 / 群聊（同一页面按模式切换） |
+| Contacts / AddFriend / FriendRequests | 好友 |
+| Profile | 个人信息、退出登录 |
+
+群聊相关页面（CreateGroup、GroupInfo 等）见 `PROJECT_STATUS.md` 第十节；当前已能从消息页进入群聊页，后续继续完善邀请/退群等入口。
+
+---
+
+## 下一步开发
+
+按 [`PROJECT_STATUS.md`](PROJECT_STATUS.md) **第十一节** 分阶段实现群聊：
+
+1. 建群 + 群列表 + 群详情  
+2. 群消息收发 + 本地存储  
+3. 邀请 / 退群 / 防重复加群  
+4. 空群销毁 + 客户端保留聊天记录  
+
+当前进度：阶段 1 已完成基础接入，阶段 2 正在实施中。
+
+---
+
+## 新会话快速上手
+
+打开 `PROJECT_STATUS.md`，从 **第十一节阶段 1** 的 checkbox 清单开始；协议与表结构见该文档第六～九节。

@@ -47,6 +47,25 @@ struct OfflineMessageRecord {
     std::string body;
 };
 
+struct GroupSummaryRecord {
+    int64_t groupId = 0;
+    std::string name;
+    int memberCount = 0;
+};
+
+struct GroupMemberDetail {
+    std::string account;
+    std::string nickname;
+    std::string role;
+};
+
+struct GroupInfoRecord {
+    int64_t groupId = 0;
+    std::string name;
+    bool dissolved = false;
+    std::vector<GroupMemberDetail> members;
+};
+
 class DatabaseManager : public Singleton<DatabaseManager>
 {
     friend class Singleton<DatabaseManager>;
@@ -102,6 +121,18 @@ public:
 
     std::optional<int64_t> getPrivateMessageCreatedAt(int64_t messageId);
 
+    std::optional<int64_t> createGroup(const std::string &name,
+                                       int64_t ownerUserId,
+                                       const std::vector<int64_t> &memberUserIds);
+
+    std::vector<GroupSummaryRecord> listMyGroups(int64_t userId);
+
+    std::optional<GroupInfoRecord> getGroupInfo(int64_t groupId, int64_t userId);
+
+    bool isGroupMember(int64_t groupId, int64_t userId);
+
+    bool groupExists(int64_t groupId);
+
 private:
     DatabaseManager() = default;
 
@@ -111,6 +142,7 @@ private:
     bool ensureFriendSchema();
     bool ensureOfflineMessagesSchema();
     bool ensurePrivateMessagesSchema();
+    bool ensureGroupSchema();
 
     int currentUserVersion();
 

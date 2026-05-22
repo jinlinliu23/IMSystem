@@ -20,6 +20,17 @@ struct ChatLocalRecord {
     qint64 serverMessageId = 0;
 };
 
+struct ChatConversationInfo {
+    QString conversationId;
+    QString peerAccount;
+    QString title;
+    bool isGroup = false;
+    qint64 groupId = 0;
+    QString groupName;
+    bool dissolved = false;
+    qint64 lastMessageAt = 0;
+};
+
 /**
  * @brief 客户端本地聊天记录（Qt Sql + QSQLITE，按登录账号分库）
  */
@@ -47,6 +58,15 @@ public:
     ChatPreview previewForPeer(const QString &peerAccount) const;
 
     QHash<QString, ChatPreview> allPeerPreviews() const;
+    bool upsertConversationMeta(const QString &conversationId,
+                                const QString &peerAccount,
+                                const QString &title,
+                                bool isGroup,
+                                qint64 groupId,
+                                const QString &groupName,
+                                bool dissolved,
+                                qint64 lastMessageAt);
+    QVector<ChatConversationInfo> listConversations() const;
 
 private:
     bool ensureSchema();
