@@ -8,7 +8,9 @@ QtObject {
         "LoginPage": "../pages/LoginPage.qml",
         "RegisterPage": "../pages/RegisterPage.qml",
         "MainPage": "../pages/MainPage.qml",
-        "ChatPage": "../pages/ChatPage.qml"
+        "ChatPage": "../pages/ChatPage.qml",
+        "AddFriendPage": "../pages/AddFriendPage.qml",
+        "FriendRequestsPage": "../pages/FriendRequestsPage.qml"
     })
 
     property var componentCache: ({})

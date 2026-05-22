@@ -1,399 +1,244 @@
 #include "clientfacade.h"
 
-#include "msg_ids.h"
+#include "core/clientsettings.h"
+#include "model/contactlistmodel.h"
+#include "model/conversationlistmodel.h"
+#include "model/currentusermodel.h"
+#include "model/friendrequestlistmodel.h"
+#include "model/messagelistmodel.h"
+#include "network/clientmessagerouter.h"
+#include "service/authservice.h"
+#include "service/chatservice.h"
+#include "service/contactservice.h"
+#include "service/groupservice.h"
 
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QSettings>
 #include <QDebug>
-
-namespace {
-
-QString defaultServerHost()
-{
-#if defined(Q_OS_ANDROID)
-    return QStringLiteral("10.0.2.2");
-#else
-    return QStringLiteral("127.0.0.1");
-#endif
-}
-
-QString endpointLabel(const QString &host, int port)
-{
-    return QStringLiteral("%1:%2").arg(host).arg(port);
-}
-
-QString connectFailHint(const QString &endpoint, const QString &detail)
-{
-    return QStringLiteral("无法连接 %1\n%2\n\n请确认：\n"
-                          "1. 电脑已运行 server\n"
-                          "2. 手机与电脑网络互通\n"
-                          "3. 真机填写电脑 IP（非 10.0.2.2）\n"
-                          "4. 防火墙放行 16701")
-        .arg(endpoint, detail);
-}
-
-} // namespace
 
 ClientFacade::ClientFacade(QObject *parent)
     : QObject(parent)
+    , settings_(new ClientSettings(this))
+    , router_(new ClientMessageRouter(this))
+    , currentUser_(new CurrentUserModel(this))
+    , conversations_(new ConversationListModel(this))
+    , contacts_(new ContactListModel(this))
+    , friendRequests_(new FriendRequestListModel(this))
+    , messages_(new MessageListModel(this))
+    , authService_(new AuthService(settings_, currentUser_, router_, this))
+    , chatService_(new ChatService(settings_, currentUser_, router_, conversations_, messages_, this))
+    , contactService_(new ContactService(settings_,
+                                         currentUser_,
+                                         router_,
+                                         contacts_,
+                                         friendRequests_,
+                                         conversations_,
+                                         this))
+    , groupService_(new GroupService(router_, this))
 {
-    loadSettings();
-
-    connect(&tcp_, &TcpClient::connected, this, &ClientFacade::onConnected);
-    connect(&tcp_, &TcpClient::connectError, this, &ClientFacade::onConnectError);
-    connect(&tcp_, &TcpClient::frameReceived, this, &ClientFacade::onFrameReceived);
-
-    connectTimer_.setSingleShot(true);
-    connectTimer_.setInterval(10000);
-    connect(&connectTimer_, &QTimer::timeout, this, &ClientFacade::onConnectTimeout);
-
-    responseTimer_.setSingleShot(true);
-    responseTimer_.setInterval(10000);
-    connect(&responseTimer_, &QTimer::timeout, this, &ClientFacade::onResponseTimeout);
-
-    qInfo() << "ClientFacade server" << endpointLabel(serverHost_, serverPort_)
-            << "loggedIn" << isLoggedIn_;
-}
-
-void ClientFacade::loadSettings()
-{
-    QSettings settings;
-    serverHost_ = settings.value(QStringLiteral("server/host"), defaultServerHost()).toString().trimmed();
-    serverPort_ = settings.value(QStringLiteral("server/port"), 16701).toInt();
-    if (serverPort_ <= 0 || serverPort_ > 65535) {
-        serverPort_ = 16701;
+    currentUser_->loadFromSettings(settings_);
+    if (currentUser_->loggedIn() && chatService_) {
+        chatService_->setOwnerAccount(currentUser_->account());
     }
 
-    isLoggedIn_ = settings.value(QStringLiteral("auth/logged_in"), false).toBool();
-    userId_ = settings.value(QStringLiteral("auth/user_id"), 0).toLongLong();
-    username_ = settings.value(QStringLiteral("auth/username")).toString();
-    nickname_ = settings.value(QStringLiteral("auth/nickname")).toString();
+    connect(settings_, &ClientSettings::serverHostChanged, this, &ClientFacade::serverHostChanged);
+    connect(settings_, &ClientSettings::serverPortChanged, this, &ClientFacade::serverPortChanged);
+    connect(settings_, &ClientSettings::authChanged, this, &ClientFacade::isLoggedInChanged);
+    connect(currentUser_, &CurrentUserModel::userChanged, this, &ClientFacade::isLoggedInChanged);
+    connect(router_, &ClientMessageRouter::busyChanged, this, &ClientFacade::busyChanged);
+
+    connect(authService_, &AuthService::registerFinished, this, &ClientFacade::registerFinished);
+    connect(authService_, &AuthService::loginFinished, this, [this](bool success, const QString &message) {
+        if (success) {
+            onAuthSessionReady();
+        }
+        emit loginFinished(success, message);
+    });
+
+    connect(authService_, &AuthService::sessionResumeFinished, this, [this](bool success, const QString &message) {
+        if (success) {
+            onAuthSessionReady();
+        } else if (!message.isEmpty()) {
+            emit sessionResumeFailed(message);
+        }
+    });
+
+    connect(contactService_, &ContactService::searchUserFinished, this, &ClientFacade::searchUserFinished);
+    connect(contactService_, &ContactService::friendRequestFinished, this, &ClientFacade::friendRequestFinished);
+    connect(contactService_, &ContactService::acceptFriendFinished, this, &ClientFacade::acceptFriendFinished);
+    connect(contactService_, &ContactService::rejectFriendFinished, this, &ClientFacade::rejectFriendFinished);
+    connect(contactService_, &ContactService::friendNotify, this, &ClientFacade::friendNotify);
+    connect(contactService_, &ContactService::friendRequestsUpdated, this, &ClientFacade::pendingFriendRequestCountChanged);
+    connect(friendRequests_, &FriendRequestListModel::pendingCountChanged, this, &ClientFacade::pendingFriendRequestCountChanged);
+    connect(contactService_, &ContactService::conversationsUpdated, this, [this]() {
+        if (chatService_) {
+            chatService_->mergeLocalPreviewsIntoConversations();
+        }
+        emit conversationsUpdated();
+    });
+    connect(chatService_, &ChatService::sendMessageFinished, this, &ClientFacade::sendMessageFinished);
+    connect(chatService_, &ChatService::chatHistoryLoaded, this, &ClientFacade::chatHistoryLoaded);
+    connect(chatService_, &ChatService::conversationPreviewUpdated, this, &ClientFacade::conversationsUpdated);
+
+    qInfo() << "ClientFacade ready"
+            << settings_->serverHost() << settings_->serverPort()
+            << "loggedIn" << isLoggedIn();
 }
 
-void ClientFacade::persistServerSettings() const
+bool ClientFacade::isLoggedIn() const
 {
-    QSettings settings;
-    settings.setValue(QStringLiteral("server/host"), serverHost_);
-    settings.setValue(QStringLiteral("server/port"), serverPort_);
+    return currentUser_ && currentUser_->loggedIn();
 }
 
-void ClientFacade::persistAuthState() const
+bool ClientFacade::busy() const
 {
-    QSettings settings;
-    settings.setValue(QStringLiteral("auth/logged_in"), isLoggedIn_);
-    settings.setValue(QStringLiteral("auth/user_id"), userId_);
-    settings.setValue(QStringLiteral("auth/username"), username_);
-    settings.setValue(QStringLiteral("auth/nickname"), nickname_);
+    return router_ && router_->busy();
 }
 
-void ClientFacade::clearAuthState()
+QString ClientFacade::serverHost() const
 {
-    userId_ = 0;
-    username_.clear();
-    nickname_.clear();
-    persistAuthState();
-    emit userInfoChanged();
+    return settings_ ? settings_->serverHost() : QString();
 }
 
-void ClientFacade::setLoggedIn(bool loggedIn)
+int ClientFacade::serverPort() const
 {
-    if (isLoggedIn_ == loggedIn) {
-        return;
-    }
-    isLoggedIn_ = loggedIn;
-    persistAuthState();
-    emit isLoggedInChanged();
-}
-
-void ClientFacade::setUserInfo(qint64 userId, const QString &username, const QString &nickname)
-{
-    userId_ = userId;
-    username_ = username;
-    nickname_ = nickname;
-    persistAuthState();
-    emit userInfoChanged();
+    return settings_ ? settings_->serverPort() : 16701;
 }
 
 void ClientFacade::setServerHost(const QString &host)
 {
-    const QString trimmed = host.trimmed();
-    if (serverHost_ == trimmed) {
-        return;
+    if (settings_) {
+        settings_->setServerHost(host);
     }
-    serverHost_ = trimmed;
-    emit serverHostChanged();
 }
 
 void ClientFacade::setServerPort(int port)
 {
-    if (serverPort_ == port) {
-        return;
+    if (settings_) {
+        settings_->setServerPort(port);
     }
-    serverPort_ = port;
-    emit serverPortChanged();
 }
 
 void ClientFacade::saveServerSettings()
 {
-    persistServerSettings();
+    if (settings_) {
+        settings_->saveServer();
+    }
+}
+
+void ClientFacade::registerUser(const QString &nickname,
+                                const QString &account,
+                                const QString &password)
+{
+    if (authService_) {
+        authService_->registerUser(nickname, account, password);
+    }
+}
+
+void ClientFacade::loginUser(const QString &account, const QString &password)
+{
+    if (authService_) {
+        authService_->loginUser(account, password);
+    }
+}
+
+void ClientFacade::searchUser(const QString &account)
+{
+    if (contactService_) {
+        contactService_->searchUser(account);
+    }
+}
+
+void ClientFacade::sendFriendRequest(const QString &toAccount)
+{
+    if (contactService_) {
+        contactService_->sendFriendRequest(toAccount);
+    }
+}
+
+void ClientFacade::acceptFriendRequest(const QString &fromAccount)
+{
+    if (contactService_) {
+        contactService_->acceptFriendRequest(fromAccount);
+    }
+}
+
+void ClientFacade::rejectFriendRequest(const QString &fromAccount)
+{
+    if (contactService_) {
+        contactService_->rejectFriendRequest(fromAccount);
+    }
+}
+
+void ClientFacade::refreshFriendRequests()
+{
+    if (contactService_) {
+        contactService_->refreshFriendRequests();
+    }
+}
+
+void ClientFacade::refreshFriendList()
+{
+    if (contactService_) {
+        contactService_->refreshFriendList();
+    }
+}
+
+void ClientFacade::syncAfterLogin()
+{
+    if (contactService_) {
+        contactService_->syncAfterLogin();
+    }
+}
+
+void ClientFacade::onAuthSessionReady()
+{
+    if (chatService_ && currentUser_) {
+        chatService_->setOwnerAccount(currentUser_->account());
+    }
+    if (contactService_) {
+        contactService_->syncAfterLogin();
+    }
+}
+
+void ClientFacade::resumeSession()
+{
+    if (!isLoggedIn()) {
+        return;
+    }
+    if (authService_ && settings_ && settings_->hasSessionPassword()) {
+        authService_->resumeSession();
+        return;
+    }
+    onAuthSessionReady();
+}
+
+void ClientFacade::openChat(const QString &peerAccount, const QString &peerTitle)
+{
+    if (chatService_) {
+        chatService_->openChat(peerAccount, peerTitle);
+    }
+}
+
+void ClientFacade::sendPrivateMessage(const QString &content)
+{
+    if (chatService_) {
+        chatService_->sendMessage(content);
+    }
 }
 
 void ClientFacade::logout()
 {
-    setLoggedIn(false);
-    clearAuthState();
-    tcp_.disconnectFromServer();
-}
-
-void ClientFacade::registerUser(const QString &nickname,
-                                const QString &username,
-                                const QString &password)
-{
-    if (busy_) {
-        emit registerFinished(false, QStringLiteral("请稍候，正在处理上一请求"), 0);
-        return;
+    if (chatService_) {
+        chatService_->clearSession();
     }
-    if (serverHost_.isEmpty()) {
-        emit registerFinished(false, QStringLiteral("请填写服务器 IP 地址"), 0);
-        return;
+    if (contactService_) {
+        contactService_->clearLocalData();
     }
-    if (nickname.trimmed().isEmpty()) {
-        emit registerFinished(false, QStringLiteral("请输入昵称"), 0);
-        return;
-    }
-    if (username.trimmed().size() < 3) {
-        emit registerFinished(false, QStringLiteral("账号至少 3 个字符"), 0);
-        return;
-    }
-    if (password.size() < 6) {
-        emit registerFinished(false, QStringLiteral("密码至少 6 位"), 0);
-        return;
-    }
-
-    persistServerSettings();
-    pendingNickname_ = nickname.trimmed();
-    pendingUsername_ = username.trimmed();
-    pendingPassword_ = password;
-    startPendingRequest(PendingRequest::Register);
-}
-
-void ClientFacade::loginUser(const QString &username, const QString &password)
-{
-    if (busy_) {
-        emit loginFinished(false, QStringLiteral("请稍候，正在处理上一请求"));
-        return;
-    }
-    if (serverHost_.isEmpty()) {
-        emit loginFinished(false, QStringLiteral("请填写服务器 IP 地址"));
-        return;
-    }
-    if (username.trimmed().isEmpty()) {
-        emit loginFinished(false, QStringLiteral("请输入账号"));
-        return;
-    }
-    if (password.isEmpty()) {
-        emit loginFinished(false, QStringLiteral("请输入密码"));
-        return;
-    }
-
-    persistServerSettings();
-    pendingUsername_ = username.trimmed();
-    pendingPassword_ = password;
-    startPendingRequest(PendingRequest::Login);
-}
-
-void ClientFacade::startPendingRequest(PendingRequest request)
-{
-    pendingRequest_ = request;
-    setBusy(true);
-    clearPendingTimers();
-
-    if (tcp_.isConnected()) {
-        sendPendingRequest();
-        return;
-    }
-    beginConnect();
-}
-
-void ClientFacade::beginConnect()
-{
-    qInfo() << "Connect to" << endpointLabel(serverHost_, serverPort_)
-            << "request" << static_cast<int>(pendingRequest_);
-    tcp_.connectToServer(serverHost_, static_cast<quint16>(serverPort_));
-    connectTimer_.start();
-}
-
-void ClientFacade::onConnected()
-{
-    connectTimer_.stop();
-    if (pendingRequest_ != PendingRequest::None) {
-        sendPendingRequest();
+    if (authService_) {
+        authService_->logout();
     }
 }
 
-void ClientFacade::sendPendingRequest()
+int ClientFacade::pendingFriendRequestCount() const
 {
-    switch (pendingRequest_) {
-    case PendingRequest::Register:
-        sendRegisterRequest();
-        break;
-    case PendingRequest::Login:
-        sendLoginRequest();
-        break;
-    default:
-        break;
-    }
-}
-
-void ClientFacade::onConnectError(const QString &message)
-{
-    if (pendingRequest_ == PendingRequest::None) {
-        return;
-    }
-    failConnect(message);
-}
-
-void ClientFacade::onConnectTimeout()
-{
-    if (pendingRequest_ == PendingRequest::None || tcp_.isConnected()) {
-        return;
-    }
-    tcp_.abortConnection();
-    failConnect(QStringLiteral("连接超时"));
-}
-
-void ClientFacade::onResponseTimeout()
-{
-    if (pendingRequest_ == PendingRequest::None) {
-        return;
-    }
-    failResponse(QStringLiteral("服务器无响应，请确认服务端正在运行"));
-}
-
-void ClientFacade::failConnect(const QString &message)
-{
-    const QString endpoint = endpointLabel(serverHost_, serverPort_);
-    const QString hint = connectFailHint(endpoint, message);
-
-    if (pendingRequest_ == PendingRequest::Register) {
-        finishRegister(false, hint);
-    } else if (pendingRequest_ == PendingRequest::Login) {
-        finishLogin(false, hint);
-    }
-}
-
-void ClientFacade::failResponse(const QString &message)
-{
-    if (pendingRequest_ == PendingRequest::Register) {
-        finishRegister(false, message);
-    } else if (pendingRequest_ == PendingRequest::Login) {
-        finishLogin(false, message);
-    }
-}
-
-void ClientFacade::sendRegisterRequest()
-{
-    QJsonObject obj;
-    obj.insert(QStringLiteral("nickname"), pendingNickname_);
-    obj.insert(QStringLiteral("username"), pendingUsername_);
-    obj.insert(QStringLiteral("password"), pendingPassword_);
-    const QByteArray body = QJsonDocument(obj).toJson(QJsonDocument::Compact);
-    tcp_.sendFrame(static_cast<quint16>(MSG_IDS::MSG_REGISTER), body);
-    responseTimer_.start();
-}
-
-void ClientFacade::sendLoginRequest()
-{
-    QJsonObject obj;
-    obj.insert(QStringLiteral("username"), pendingUsername_);
-    obj.insert(QStringLiteral("password"), pendingPassword_);
-    const QByteArray body = QJsonDocument(obj).toJson(QJsonDocument::Compact);
-    tcp_.sendFrame(static_cast<quint16>(MSG_IDS::MSG_LOGIN), body);
-    responseTimer_.start();
-}
-
-void ClientFacade::onFrameReceived(quint16 msgId, const QByteArray &body)
-{
-    if (pendingRequest_ == PendingRequest::Register
-        && msgId == static_cast<quint16>(MSG_IDS::MSG_REGISTER_RSP)) {
-        responseTimer_.stop();
-
-        QJsonParseError parseError;
-        const QJsonDocument doc = QJsonDocument::fromJson(body, &parseError);
-        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-            finishRegister(false, QStringLiteral("服务器响应格式错误"));
-            return;
-        }
-
-        const QJsonObject obj = doc.object();
-        const int code = obj.value(QStringLiteral("code")).toInt(-1);
-        const QString msg = obj.value(QStringLiteral("msg")).toString(QStringLiteral("未知错误"));
-        const qint64 userId = obj.value(QStringLiteral("user_id")).toInteger(0);
-
-        if (code == static_cast<int>(API_CODE::OK)) {
-            finishRegister(true, msg, userId);
-        } else {
-            finishRegister(false, msg);
-        }
-        return;
-    }
-
-    if (pendingRequest_ == PendingRequest::Login
-        && msgId == static_cast<quint16>(MSG_IDS::MSG_LOGIN_RSP)) {
-        responseTimer_.stop();
-
-        QJsonParseError parseError;
-        const QJsonDocument doc = QJsonDocument::fromJson(body, &parseError);
-        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-            finishLogin(false, QStringLiteral("服务器响应格式错误"));
-            return;
-        }
-
-        const QJsonObject obj = doc.object();
-        const int code = obj.value(QStringLiteral("code")).toInt(-1);
-        const QString msg = obj.value(QStringLiteral("msg")).toString(QStringLiteral("未知错误"));
-
-        if (code == static_cast<int>(API_CODE::OK)) {
-            const qint64 userId = obj.value(QStringLiteral("user_id")).toInteger(0);
-            const QString uname = obj.value(QStringLiteral("username")).toString();
-            const QString nick = obj.value(QStringLiteral("nickname")).toString();
-            setUserInfo(userId, uname, nick);
-            setLoggedIn(true);
-            finishLogin(true, msg);
-        } else {
-            finishLogin(false, msg);
-        }
-    }
-}
-
-void ClientFacade::finishRegister(bool success, const QString &message, qint64 userId)
-{
-    pendingRequest_ = PendingRequest::None;
-    clearPendingTimers();
-    setBusy(false);
-    emit registerFinished(success, message, userId);
-}
-
-void ClientFacade::finishLogin(bool success, const QString &message)
-{
-    pendingRequest_ = PendingRequest::None;
-    clearPendingTimers();
-    setBusy(false);
-    emit loginFinished(success, message);
-}
-
-void ClientFacade::clearPendingTimers()
-{
-    connectTimer_.stop();
-    responseTimer_.stop();
-}
-
-void ClientFacade::setBusy(bool busy)
-{
-    if (busy_ == busy) {
-        return;
-    }
-    busy_ = busy;
-    emit busyChanged();
+    return friendRequests_ ? friendRequests_->pendingCount() : 0;
 }

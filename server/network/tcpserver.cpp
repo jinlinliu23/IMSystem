@@ -1,5 +1,7 @@
 #include "tcpserver.h"
 
+#include "../utility/onlineusersmanager.h"
+
 #include <iostream>
 
 TcpServer::TcpServer(EventLoop* loop, int port)
@@ -41,6 +43,7 @@ void TcpServer::onNewConnection(int conn_fd) {
 
 void TcpServer::onConnectionClose(TcpConnection* conn) {
     int fd = conn->fd();
+    OnlineUsersManager::GetInstance()->unbindByConnectionFd(fd);
     std::cerr << "Connection closed, fd=" << fd << std::endl;
     // 从 map 中移除 -> shared_ptr 析构 -> TcpConnection 析构（自动清理 epoll 和 fd）
     _connections.erase(fd);

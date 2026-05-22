@@ -62,10 +62,24 @@ ApplicationWindow {
         Component.onCompleted: {
             nav.stackView = stackView
             if (typeof ClientFacade !== "undefined" && ClientFacade.isLoggedIn) {
+                ClientFacade.resumeSession()
                 nav.replace("MainPage")
             } else {
                 nav.replace("LoginPage")
             }
+        }
+    }
+
+    // 仅同意/拒绝等结果弹窗；好友申请靠红点，登录不弹申请提示
+    Connections {
+        target: typeof ClientFacade !== "undefined" ? ClientFacade : null
+        function onFriendNotify(message) {
+            if (message.length > 0)
+                showAlert(message)
+        }
+        function onSessionResumeFailed(message) {
+            if (message.length > 0)
+                showAlert(message)
         }
     }
 }

@@ -40,13 +40,12 @@ void RegisterHandler::handle(std::shared_ptr<TcpConnection> tc,
         return;
     }
 
-    // JSON 字段 username 表示「账号」（唯一标识）；nickname 表示「昵称」（展示名，可后续修改）
-    if (!root.isMember("username") || !root.isMember("password") || !root.isMember("nickname")) {
+    if (!root.isMember("account") || !root.isMember("password") || !root.isMember("nickname")) {
         sendResponse(tc, static_cast<int>(API_CODE::INVALID_PARAMS), "缺少必填字段");
         return;
     }
 
-    const std::string account = root["username"].asString();
+    const std::string account = root["account"].asString();
     const std::string password = root["password"].asString();
     const std::string nickname = root["nickname"].asString();
 
@@ -66,8 +65,8 @@ void RegisterHandler::handle(std::shared_ptr<TcpConnection> tc,
     }
 
     auto db = DatabaseManager::GetInstance();
-    if (db->usernameExists(account)) {
-        sendResponse(tc, static_cast<int>(API_CODE::USERNAME_EXISTS), "该账号已被注册，请更换其他账号");
+    if (db->accountExists(account)) {
+        sendResponse(tc, static_cast<int>(API_CODE::ACCOUNT_EXISTS), "该账号已被注册，请更换其他账号");
         return;
     }
 

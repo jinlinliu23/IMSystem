@@ -2,6 +2,8 @@
 
 #include "../database/databasemanager.h"
 #include "../network/msgnode.h"
+#include "../utility/messagedispatcher.h"
+#include "../utility/onlineusersmanager.h"
 #include "../utility/passwordhash.h"
 #include "msg_ids.h"
 
@@ -20,21 +22,21 @@ void LoginHandler::handle(std::shared_ptr<TcpConnection> tc,
         return;
     }
 
-    if (!root.isMember("username") || !root.isMember("password")) {
+    if (!root.isMember("account") || !root.isMember("password")) {
         sendResponse(tc, static_cast<int>(API_CODE::INVALID_PARAMS), "缺少必填字段");
         return;
     }
 
-    const std::string username = root["username"].asString();
+    const std::string account = root["account"].asString();
     const std::string password = root["password"].asString();
 
-    if (username.empty() || password.empty()) {
+    if (account.empty() || password.empty()) {
         sendResponse(tc, static_cast<int>(API_CODE::INVALID_PARAMS), "账号和密码不能为空");
         return;
     }
 
     auto db = DatabaseManager::GetInstance();
-    const auto user = db->findUserAuthByUsername(username);
+    const auto user = db->findUserAuthByAccount(account);
     if (!user.has_value()) {
         sendResponse(tc, static_cast<int>(API_CODE::AUTH_FAILED), "账号或密码错误");
         return;
@@ -47,12 +49,25 @@ void LoginHandler::handle(std::shared_ptr<TcpConnection> tc,
             return;
         }
 
+        auto onlineMgr = OnlineUsersManager::GetInstance();
+        if (onlineMgr->isOnlineOnOtherConnection(user->account, tc->fd())) {
+            sendResponse(tc,
+                         static_cast<int>(API_CODE::ALREADY_ONLINE),
+                         "该账号已在其他设备登录，请先退出后再试");
+            return;
+        }
+
+        onlineMgr->bindOnline(
+            user->account, user->id, user->nickname, tc);
+
         sendResponse(tc,
                      static_cast<int>(API_CODE::OK),
                      "登录成功",
                      user->id,
-                     user->username,
+                     user->account,
                      user->nickname);
+
+        MessageDispatcher::GetInstance()->flushOfflineMessages(user->account);
     } catch (const std::exception &ex) {
         sendResponse(tc, static_cast<int>(API_CODE::DB_ERROR), "服务器内部错误");
     }
@@ -62,7 +77,7 @@ void LoginHandler::sendResponse(std::shared_ptr<TcpConnection> tc,
                                 int code,
                                 const std::string &msg,
                                 int64_t userId,
-                                const std::string &username,
+                                const std::string &account,
                                 const std::string &nickname)
 {
     Json::Value root;
@@ -70,7 +85,7 @@ void LoginHandler::sendResponse(std::shared_ptr<TcpConnection> tc,
     root["msg"] = msg;
     if (code == static_cast<int>(API_CODE::OK)) {
         root["user_id"] = static_cast<Json::Int64>(userId);
-        root["username"] = username;
+        root["account"] = account;
         root["nickname"] = nickname;
     }
 

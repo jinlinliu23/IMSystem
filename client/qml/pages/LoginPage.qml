@@ -220,5 +220,8 @@ Item {
             }
             appWindow.showAlert(message)
         }
+        function onFriendNotify(message) {
+            appWindow.showAlert(message)
+        }
     }
 }

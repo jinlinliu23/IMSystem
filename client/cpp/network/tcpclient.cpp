@@ -1,8 +1,14 @@
-#include "tcpclient.h"
-#include "protocolframe.h"
+#include "network/tcpclient.h"
+#include "network/protocolframe.h"
 
 #include <QDebug>
 #include <qendian.h>
+
+TcpClient &TcpClient::instance()
+{
+    static TcpClient client;
+    return client;
+}
 
 TcpClient::TcpClient(QObject *parent)
     : QObject(parent)
@@ -67,7 +73,6 @@ void TcpClient::sendFrame(quint16 msgId, const QByteArray &body)
     QByteArray packet;
     packet.resize(Protocol::HEAD_TOTAL_LEN + body.size());
 
-    // 帧头使用网络字节序（大端），与服务端 SendNode 一致
     const quint16 msgIdNet = qToBigEndian(msgId);
     const quint32 bodyLenNet = qToBigEndian(static_cast<quint32>(body.size()));
 
@@ -88,7 +93,6 @@ void TcpClient::onReadyRead()
 
 void TcpClient::onSocketError(QAbstractSocket::SocketError error)
 {
-    // 已连接后的收发错误由业务层另行处理，这里只上报「连接阶段」失败
     if (socket_.state() == QAbstractSocket::ConnectedState) {
         return;
     }
@@ -105,7 +109,6 @@ void TcpClient::onStateChanged(QAbstractSocket::SocketState state)
 
 void TcpClient::processBuffer()
 {
-    // 循环解析：缓冲区里可能有多帧（粘包），也可能只有半帧（拆包）
     while (readBuffer_.size() >= Protocol::HEAD_TOTAL_LEN) {
         quint16 msgId = 0;
         memcpy(&msgId, readBuffer_.constData(), Protocol::HEAD_ID_LEN);
@@ -117,7 +120,7 @@ void TcpClient::processBuffer()
 
         const int frameLen = Protocol::HEAD_TOTAL_LEN + static_cast<int>(bodyLen);
         if (readBuffer_.size() < frameLen) {
-            break; // body 未收齐，等待下次 readyRead
+            break;
         }
 
         const QByteArray body = readBuffer_.mid(Protocol::HEAD_TOTAL_LEN, static_cast<int>(bodyLen));

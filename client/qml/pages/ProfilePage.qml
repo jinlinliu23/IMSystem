@@ -12,7 +12,8 @@ Item {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: typeof ClientFacade !== "undefined" ? ClientFacade.nickname : ""
+            text: (typeof ClientFacade !== "undefined" && ClientFacade.currentUser)
+                  ? ClientFacade.currentUser.nickname : ""
             font.pixelSize: 24
             font.bold: true
             color: theme ? theme.text : "#333"
@@ -20,18 +21,16 @@ Item {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: typeof ClientFacade !== "undefined"
-                  ? ("账号：" + ClientFacade.username)
-                  : ""
+            text: (typeof ClientFacade !== "undefined" && ClientFacade.currentUser)
+                  ? ("账号：" + ClientFacade.currentUser.account) : ""
             font.pixelSize: 15
             color: theme ? theme.text : "#555"
         }
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: typeof ClientFacade !== "undefined"
-                  ? ("ID：" + ClientFacade.userId)
-                  : ""
+            text: (typeof ClientFacade !== "undefined" && ClientFacade.currentUser)
+                  ? ("ID：" + ClientFacade.currentUser.userId) : ""
             font.pixelSize: 12
             color: "#888"
         }

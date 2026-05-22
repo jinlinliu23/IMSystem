@@ -23,9 +23,16 @@ add_executable(server main.cpp
     utility/msgIdconst.h
     utility/mesrout.h utility/mesrout.cpp
     utility/passwordhash.h utility/passwordhash.cpp
+    utility/onlineuserproxy.h
+    utility/onlineusersmanager.h utility/onlineusersmanager.cpp
+    utility/offlinemessagekind.h
+    utility/messagedispatcher.h utility/messagedispatcher.cpp
     business/handler.h business/handler.cpp
     business/registerhandler.h business/registerhandler.cpp
     business/loginhandler.h business/loginhandler.cpp
+    business/searchuserhandler.h business/searchuserhandler.cpp
+    business/friendhandler.h business/friendhandler.cpp
+    business/privatechathandler.h business/privatechathandler.cpp
     database/databasemanager.h database/databasemanager.cpp
 )
 

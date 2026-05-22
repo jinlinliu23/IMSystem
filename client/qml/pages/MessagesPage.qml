@@ -1,11 +1,14 @@
 import QtQuick
 
 Item {
-    anchors.fill: parent
+    width: parent.width
+    height: parent.height
     property var n: appWindow.nav
     property var t: appWindow.theme
 
-    // 顶部菜单栏
+    readonly property int pendingRequestCount:
+        (typeof ClientFacade !== "undefined") ? ClientFacade.pendingFriendRequestCount : 0
+
     Item {
         id: header
         height: 48
@@ -22,7 +25,6 @@ Item {
             anchors.leftMargin: 16
             anchors.rightMargin: 12
 
-            // 标题，占据剩余空间
             Text {
                 text: "消息"
                 font.pixelSize: 18
@@ -31,7 +33,6 @@ Item {
                 width: parent.width - plusBtn.width - 8
             }
 
-            // 加号按钮
             Item {
                 id: plusBtn
                 width: 36
@@ -41,7 +42,7 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: 18
-                    color: plusTap.pressed ?  "#e0e0e0": "white"
+                    color: plusTap.pressed ? "#e0e0e0" : "white"
                 }
 
                 Text {
@@ -49,6 +50,18 @@ Item {
                     font.pixelSize: 15
                     color: t.primary
                     anchors.centerIn: parent
+                }
+
+                Rectangle {
+                    width: 8
+                    height: 8
+                    radius: 4
+                    color: "#e74c3c"
+                    visible: pendingRequestCount > 0
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.rightMargin: 2
+                    anchors.topMargin: 2
                 }
 
                 TapHandler {
@@ -59,21 +72,18 @@ Item {
         }
     }
 
-    // 消息列表
     ListView {
+        id: conversationList
         anchors.top: header.bottom
         anchors.topMargin: 8
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         clip: true
-
-        model: ListModel {
-            ListElement { name: "回射测试"; last: "点击进入回声测试"; time: "刚刚" }
-        }
+        model: (typeof ClientFacade !== "undefined") ? ClientFacade.conversations : null
 
         delegate: Item {
-            width: ListView.view.width
+            width: conversationList.width
             height: 64
 
             Rectangle {
@@ -104,17 +114,27 @@ Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 16
                 anchors.verticalCenter: parent.verticalCenter
+                visible: model.time.length > 0
             }
 
             TapHandler {
                 id: listTap
-                onTapped: n.push("ChatPage", { target: model.name })
+                onTapped: n.push("ChatPage", {
+                    target: model.name,
+                    peerAccount: model.peerAccount || model.conversationId
+                })
             }
+        }
+
+        Text {
+            anchors.centerIn: parent
+            visible: conversationList.count === 0
+            text: "暂无会话，添加好友后将出现在这里"
+            color: "#999"
+            font.pixelSize: 14
         }
     }
 
-
-    // 上下文菜单（弹出位置相对整个 header）
     Rectangle {
         id: contextMenu
         visible: false
@@ -123,7 +143,6 @@ Item {
         radius: 6
         color: t.surface
         border.color: t.border
-        //z: 10
         anchors.right: header.right
         anchors.rightMargin: 12
         anchors.top: header.bottom
@@ -138,7 +157,7 @@ Item {
                 height: parent.height / 2
                 Rectangle {
                     anchors.fill: parent
-                    color: createGroupTap.pressed ?  "grey": "white"
+                    color: createGroupTap.pressed ? "grey" : "white"
                     radius: 4
                 }
                 Text {
@@ -151,8 +170,8 @@ Item {
                     id: createGroupTap
                     gesturePolicy: TapHandler.WithinBounds
                     onTapped: {
-                        contextMenu.visible = false;
-                        console.log("创建群聊");
+                        contextMenu.visible = false
+                        console.log("创建群聊")
                     }
                 }
             }
@@ -168,7 +187,7 @@ Item {
                 height: parent.height / 2
                 Rectangle {
                     anchors.fill: parent
-                    color: addFriendTap.pressed ?  "grey": "white"
+                    color: addFriendTap.pressed ? "grey" : "white"
                     radius: 4
                 }
                 Text {
@@ -181,11 +200,16 @@ Item {
                     id: addFriendTap
                     gesturePolicy: TapHandler.WithinBounds
                     onTapped: {
-                        contextMenu.visible = false;
-                        console.log("添加好友");
+                        contextMenu.visible = false
+                        n.push("AddFriendPage")
                     }
                 }
             }
         }
+    }
+
+    Component.onCompleted: {
+        if (typeof ClientFacade !== "undefined")
+            ClientFacade.syncAfterLogin()
     }
 }

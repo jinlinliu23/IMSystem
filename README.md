@@ -50,7 +50,25 @@
 
 登录成功后客户端将 `user_id` / `username` / `nickname` 写入 `QSettings`，下次启动直达主页。
 
-单聊/群聊消息 ID 尚未实现，可在 `common/msg_ids.h` 中扩展。
+### 好友（进行中）
+
+**搜索用户** `msg_id = 1400`（需已登录，用于添加好友前查找）：
+
+```json
+{"from_user_id":1,"username":"bob"}
+```
+
+**搜索响应** `msg_id = 1401`：
+
+```json
+{"code":0,"msg":"ok","user":{"user_id":2,"username":"bob","nickname":"鲍勃"}}
+```
+
+`code` 扩展：5 用户不存在，8 不能添加自己。
+
+数据库（`user_version >= 3`）：`friend_requests`、`friendships` 表已创建，发送/接受申请在后续步骤实现。
+
+单聊消息 ID 尚未实现，见 `common/msg_ids.h`。
 
 ## 服务端
 

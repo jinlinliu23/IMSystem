@@ -1,35 +1,52 @@
 #pragma once
 
+#include "../utility/offlinemessagekind.h"
 #include "../utility/singleton.h"
 
+#include <cstdint>
 #include <optional>
 #include <sqlite3.h>
 #include <string>
+#include <vector>
 
-/**
- * @brief 用户表一行（查询结果，不含密码）
- */
 struct UserRecord {
     int64_t id = 0;
-    std::string username; ///< 账号（唯一标识，协议 JSON 字段名 username）
-    std::string nickname; ///< 昵称（展示名）
+    std::string account;
+    std::string nickname;
 };
 
-/** 登录校验用：包含密码哈希与盐（仅服务端内部使用） */
 struct UserAuthRecord {
     int64_t id = 0;
-    std::string username;
+    std::string account;
     std::string nickname;
     std::string passwordHash;
     std::string salt;
 };
 
-/**
- * @brief SQLite 数据库单例，运行在服务端进程内
- *
- * 数据库文件路径由 main.cpp 传入（默认 server/data/im.db）。
- * 不是独立安装的 MySQL 服务；首次启动时自动建表。
- */
+struct FriendRequestRecord {
+    int64_t requestId = 0;
+    int64_t fromUserId = 0;
+    std::string fromAccount;
+    std::string fromNickname;
+};
+
+struct PrivateMessageRecord {
+    int64_t messageId = 0;
+    std::string fromAccount;
+    std::string content;
+    int64_t createdAt = 0;
+};
+
+struct OfflineMessageRecord {
+    int64_t id = 0;
+    int kind = 0;
+    std::string fromAccount;
+    std::string toAccount;
+    int64_t groupId = 0;
+    int pushMsgId = 0;
+    std::string body;
+};
+
 class DatabaseManager : public Singleton<DatabaseManager>
 {
     friend class Singleton<DatabaseManager>;
@@ -37,29 +54,65 @@ class DatabaseManager : public Singleton<DatabaseManager>
 public:
     ~DatabaseManager();
 
-    /** 打开/创建数据库文件，并执行 ensureSchema() */
     bool init(const std::string &dbPath);
 
-    bool usernameExists(const std::string &username);
+    bool accountExists(const std::string &account);
 
-    /** 插入新用户，成功返回自增 user_id */
-    std::optional<int64_t> insertUser(const std::string &username,
-                                      const std::string &nickname,
-                                      const std::string &passwordHash,
-                                      const std::string &salt);
+    std::optional<int64_t> insertUser(const std::string &account,
+                                        const std::string &nickname,
+                                        const std::string &passwordHash,
+                                        const std::string &salt);
 
-    /** 按用户名查询（不含密码字段） */
-    std::optional<UserRecord> findUserByUsername(const std::string &username);
+    std::optional<UserRecord> findUserByAccount(const std::string &account);
+    std::optional<UserRecord> findUserById(int64_t userId);
+    std::optional<UserAuthRecord> findUserAuthByAccount(const std::string &account);
 
-    /** 按用户名查询，含 password_hash、salt，供登录校验 */
-    std::optional<UserAuthRecord> findUserAuthByUsername(const std::string &username);
+    bool insertOfflineMessage(const std::string &fromAccount,
+                              const std::string &toAccount,
+                              OfflineMessageKind kind,
+                              uint16_t pushMsgId,
+                              const std::string &body,
+                              int64_t groupId = 0);
+
+    std::vector<OfflineMessageRecord> fetchUndeliveredOfflineMessages(const std::string &toAccount);
+
+    bool markOfflineMessageDelivered(int64_t messageId);
+
+    bool areFriends(int64_t userId, int64_t friendUserId);
+
+    bool hasPendingFriendRequest(int64_t fromUserId, int64_t toUserId);
+
+    bool insertFriendRequest(int64_t fromUserId, int64_t toUserId);
+
+    std::vector<FriendRequestRecord> listPendingIncomingRequests(int64_t toUserId);
+
+    bool acceptFriendRequest(int64_t fromUserId, int64_t toUserId);
+
+    bool rejectFriendRequest(int64_t fromUserId, int64_t toUserId);
+
+    std::vector<UserRecord> listFriends(int64_t userId);
+
+    std::optional<int64_t> insertPrivateMessage(int64_t fromUserId,
+                                                int64_t toUserId,
+                                                const std::string &content);
+
+    std::vector<PrivateMessageRecord> listPrivateMessagesBetween(int64_t userId,
+                                                                 int64_t peerUserId,
+                                                                 int limit = 50);
+
+    std::optional<int64_t> getPrivateMessageCreatedAt(int64_t messageId);
 
 private:
     DatabaseManager() = default;
 
-    /** 创建 users 表（若不存在），并按需迁移为区分大小写的账号唯一约束 */
     bool ensureSchema();
     bool migrateUsernameCaseSensitiveIfNeeded();
+    bool migrateAccountColumnIfNeeded();
+    bool ensureFriendSchema();
+    bool ensureOfflineMessagesSchema();
+    bool ensurePrivateMessagesSchema();
+
+    int currentUserVersion();
 
     sqlite3 *db_ = nullptr;
     std::string dbPath_;

@@ -1,15 +1,21 @@
-#ifndef CLIENTFACADE_H
-#define CLIENTFACADE_H
+#pragma once
 
-#include "tcpclient.h"
+#include "model/contactlistmodel.h"
+#include "model/conversationlistmodel.h"
+#include "model/currentusermodel.h"
+#include "model/friendrequestlistmodel.h"
+#include "model/messagelistmodel.h"
 
 #include <QObject>
 #include <QString>
-#include <QTimer>
 
-/**
- * @brief 客户端业务门面：注册、登录、会话状态（供 QML 调用）
- */
+class ClientSettings;
+class ClientMessageRouter;
+class AuthService;
+class ChatService;
+class ContactService;
+class GroupService;
+
 class ClientFacade : public QObject
 {
     Q_OBJECT
@@ -17,88 +23,86 @@ class ClientFacade : public QObject
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(QString serverHost READ serverHost WRITE setServerHost NOTIFY serverHostChanged)
     Q_PROPERTY(int serverPort READ serverPort WRITE setServerPort NOTIFY serverPortChanged)
-    Q_PROPERTY(qint64 userId READ userId NOTIFY userInfoChanged)
-    Q_PROPERTY(QString username READ username NOTIFY userInfoChanged) ///< 账号（唯一标识）
-    Q_PROPERTY(QString nickname READ nickname NOTIFY userInfoChanged) ///< 昵称（展示名）
     Q_PROPERTY(int themeMode READ themeMode CONSTANT)
+
+    Q_PROPERTY(CurrentUserModel *currentUser READ currentUser CONSTANT)
+    Q_PROPERTY(ConversationListModel *conversations READ conversations CONSTANT)
+    Q_PROPERTY(ContactListModel *contacts READ contacts CONSTANT)
+    Q_PROPERTY(FriendRequestListModel *friendRequests READ friendRequests CONSTANT)
+    Q_PROPERTY(int pendingFriendRequestCount READ pendingFriendRequestCount NOTIFY pendingFriendRequestCountChanged)
+    Q_PROPERTY(MessageListModel *messages READ messages CONSTANT)
 
 public:
     explicit ClientFacade(QObject *parent = nullptr);
 
-    bool isLoggedIn() const { return isLoggedIn_; }
-    bool busy() const { return busy_; }
-    QString serverHost() const { return serverHost_; }
-    int serverPort() const { return serverPort_; }
-    qint64 userId() const { return userId_; }
-    QString username() const { return username_; }
-    QString nickname() const { return nickname_; }
+    bool isLoggedIn() const;
+    bool busy() const;
+    QString serverHost() const;
+    int serverPort() const;
     int themeMode() const { return 0; }
+
+    CurrentUserModel *currentUser() const { return currentUser_; }
+    ConversationListModel *conversations() const { return conversations_; }
+    ContactListModel *contacts() const { return contacts_; }
+    FriendRequestListModel *friendRequests() const { return friendRequests_; }
+    int pendingFriendRequestCount() const;
+    MessageListModel *messages() const { return messages_; }
 
     void setServerHost(const QString &host);
     void setServerPort(int port);
 
     Q_INVOKABLE void saveServerSettings();
     Q_INVOKABLE void registerUser(const QString &nickname,
-                                  const QString &username,
+                                  const QString &account,
                                   const QString &password);
-    Q_INVOKABLE void loginUser(const QString &username, const QString &password);
+    Q_INVOKABLE void loginUser(const QString &account, const QString &password);
     Q_INVOKABLE void logout();
+    Q_INVOKABLE void searchUser(const QString &account);
+    Q_INVOKABLE void sendFriendRequest(const QString &toAccount);
+    Q_INVOKABLE void acceptFriendRequest(const QString &fromAccount);
+    Q_INVOKABLE void rejectFriendRequest(const QString &fromAccount);
+    Q_INVOKABLE void refreshFriendRequests();
+    Q_INVOKABLE void refreshFriendList();
+    Q_INVOKABLE void syncAfterLogin();
+    /** 本地已登录时向服务端恢复会话（拉离线私聊）；无保存密码时仅同步好友 */
+    Q_INVOKABLE void resumeSession();
+    Q_INVOKABLE void openChat(const QString &peerAccount, const QString &peerTitle);
+    Q_INVOKABLE void sendPrivateMessage(const QString &content);
 
 signals:
     void isLoggedInChanged();
     void busyChanged();
     void serverHostChanged();
     void serverPortChanged();
-    void userInfoChanged();
     void registerFinished(bool success, const QString &message, qint64 userId);
     void loginFinished(bool success, const QString &message);
-
-private slots:
-    void onConnected();
-    void onConnectError(const QString &message);
-    void onFrameReceived(quint16 msgId, const QByteArray &body);
-    void onConnectTimeout();
-    void onResponseTimeout();
+    void sessionResumeFailed(const QString &message);
+    void searchUserFinished(bool success,
+                            const QString &message,
+                            qint64 userId,
+                            const QString &account,
+                            const QString &nickname);
+    void friendRequestFinished(bool success, const QString &message);
+    void acceptFriendFinished(bool success, const QString &message);
+    void rejectFriendFinished(bool success, const QString &message);
+    void friendNotify(const QString &message);
+    void pendingFriendRequestCountChanged();
+    void conversationsUpdated();
+    void sendMessageFinished(bool success, const QString &message);
+    void chatHistoryLoaded();
 
 private:
-    enum class PendingRequest { None, Register, Login };
+    ClientSettings *settings_ = nullptr;
+    ClientMessageRouter *router_ = nullptr;
+    CurrentUserModel *currentUser_ = nullptr;
+    ConversationListModel *conversations_ = nullptr;
+    ContactListModel *contacts_ = nullptr;
+    FriendRequestListModel *friendRequests_ = nullptr;
+    MessageListModel *messages_ = nullptr;
+    AuthService *authService_ = nullptr;
+    ChatService *chatService_ = nullptr;
+    ContactService *contactService_ = nullptr;
+    GroupService *groupService_ = nullptr;
 
-    void loadSettings();
-    void persistServerSettings() const;
-    void persistAuthState() const;
-    void clearAuthState();
-    void setLoggedIn(bool loggedIn);
-    void setUserInfo(qint64 userId, const QString &username, const QString &nickname);
-
-    void setBusy(bool busy);
-    void clearPendingTimers();
-    void startPendingRequest(PendingRequest request);
-    void beginConnect();
-    void sendPendingRequest();
-    void sendRegisterRequest();
-    void sendLoginRequest();
-    void failConnect(const QString &message);
-    void failResponse(const QString &message);
-    void finishRegister(bool success, const QString &message, qint64 userId = 0);
-    void finishLogin(bool success, const QString &message);
-
-    TcpClient tcp_;
-    QTimer connectTimer_;
-    QTimer responseTimer_;
-
-    PendingRequest pendingRequest_ = PendingRequest::None;
-    bool isLoggedIn_ = false;
-    bool busy_ = false;
-    QString serverHost_;
-    int serverPort_ = 16701;
-
-    qint64 userId_ = 0;
-    QString username_;
-    QString nickname_;
-
-    QString pendingNickname_;
-    QString pendingUsername_;
-    QString pendingPassword_;
+    void onAuthSessionReady();
 };
-
-#endif // CLIENTFACADE_H
