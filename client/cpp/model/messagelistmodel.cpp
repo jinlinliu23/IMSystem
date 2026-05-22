@@ -25,6 +25,10 @@ QVariant MessageListModel::data(const QModelIndex &index, int role) const
         return item.who;
     case TextRole:
         return item.text;
+    case SenderNameRole:
+        return item.senderName;
+    case SenderAccountRole:
+        return item.senderAccount;
     default:
         return {};
     }
@@ -35,6 +39,8 @@ QHash<int, QByteArray> MessageListModel::roleNames() const
     return {
         {WhoRole, "who"},
         {TextRole, "text"},
+        {SenderNameRole, "senderName"},
+        {SenderAccountRole, "senderAccount"},
     };
 }
 
@@ -48,11 +54,14 @@ void MessageListModel::clear()
     endResetModel();
 }
 
-void MessageListModel::appendMessage(const QString &who, const QString &text)
+void MessageListModel::appendMessage(const QString &who,
+                                     const QString &text,
+                                     const QString &senderName,
+                                     const QString &senderAccount)
 {
     const int row = items_.size();
     beginInsertRows(QModelIndex(), row, row);
-    items_.append(Item{who, text});
+    items_.append(Item{who, text, senderName, senderAccount});
     endInsertRows();
 }
 

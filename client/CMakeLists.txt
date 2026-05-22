@@ -66,6 +66,7 @@ qt_add_qml_module(appclient
         QML_FILES qml/pages/FriendRequestsPage.qml
         QML_FILES qml/pages/CreateGroupPage.qml
         QML_FILES qml/pages/GroupInfoPage.qml
+        QML_FILES qml/components/ImAvatar.qml
 )
 
 set_target_properties(appclient PROPERTIES

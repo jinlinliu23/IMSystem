@@ -35,6 +35,7 @@ class ClientFacade : public QObject
     Q_PROPERTY(int pendingFriendRequestCount READ pendingFriendRequestCount NOTIFY pendingFriendRequestCountChanged)
     Q_PROPERTY(int pendingGroupInviteCount READ pendingGroupInviteCount CONSTANT)
     Q_PROPERTY(int notificationCount READ notificationCount NOTIFY notificationCountChanged)
+    Q_PROPERTY(int unreadMessageCount READ unreadMessageCount NOTIFY unreadMessageCountChanged)
     Q_PROPERTY(MessageListModel *messages READ messages CONSTANT)
     Q_PROPERTY(GroupListModel *groups READ groups CONSTANT)
 
@@ -54,6 +55,7 @@ public:
     int pendingFriendRequestCount() const;
     int pendingGroupInviteCount() const { return 0; }
     int notificationCount() const;
+    int unreadMessageCount() const;
     MessageListModel *messages() const { return messages_; }
     GroupListModel *groups() const { return groups_; }
 
@@ -77,6 +79,7 @@ public:
     Q_INVOKABLE void resumeSession();
     Q_INVOKABLE void openChat(const QString &peerAccount, const QString &peerTitle);
     Q_INVOKABLE void sendPrivateMessage(const QString &content);
+    Q_INVOKABLE void sendGroupMessage(qint64 groupId, const QString &content);
     Q_INVOKABLE void createGroup(const QString &name, const QStringList &memberAccounts);
     Q_INVOKABLE void refreshMyGroups();
     Q_INVOKABLE void fetchGroupInfo(qint64 groupId);
@@ -100,6 +103,7 @@ signals:
     void friendNotify(const QString &message);
     void pendingFriendRequestCountChanged();
     void notificationCountChanged();
+    void unreadMessageCountChanged();
     void conversationsUpdated();
     void createGroupFinished(bool success, const QString &message, qint64 groupId);
     void groupListUpdated();

@@ -26,7 +26,7 @@ ClientFacade::ClientFacade(QObject *parent)
     , messages_(new MessageListModel(this))
     , groups_(new GroupListModel(this))
     , authService_(new AuthService(settings_, currentUser_, router_, this))
-    , chatService_(new ChatService(settings_, currentUser_, router_, conversations_, messages_, this))
+    , chatService_(new ChatService(settings_, currentUser_, router_, conversations_, messages_, contacts_, this))
     , contactService_(new ContactService(settings_,
                                          currentUser_,
                                          router_,
@@ -82,6 +82,8 @@ ClientFacade::ClientFacade(QObject *parent)
         emit notificationCountChanged();
     });
     connect(groupService_, &GroupService::createGroupFinished, this, &ClientFacade::createGroupFinished);
+    connect(groupService_, &GroupService::sendGroupMessageFinished, this, &ClientFacade::sendMessageFinished);
+    connect(groupService_, &GroupService::groupMessageSent, chatService_, &ChatService::onOwnGroupMessageSent);
     connect(groupService_, &GroupService::groupListUpdated, this, [this]() {
         emit groupListUpdated();
         emit conversationsUpdated();
@@ -96,6 +98,7 @@ ClientFacade::ClientFacade(QObject *parent)
     connect(chatService_, &ChatService::sendMessageFinished, this, &ClientFacade::sendMessageFinished);
     connect(chatService_, &ChatService::chatHistoryLoaded, this, &ClientFacade::chatHistoryLoaded);
     connect(chatService_, &ChatService::conversationPreviewUpdated, this, &ClientFacade::conversationsUpdated);
+    connect(conversations_, &ConversationListModel::totalUnreadChanged, this, &ClientFacade::unreadMessageCountChanged);
 
     qInfo() << "ClientFacade ready"
             << settings_->serverHost() << settings_->serverPort()
@@ -247,6 +250,14 @@ void ClientFacade::sendPrivateMessage(const QString &content)
     }
 }
 
+void ClientFacade::sendGroupMessage(qint64 groupId, const QString &content)
+{
+    if (groupService_) {
+        groupService_->sendGroupMessage(groupId, content);
+    }
+}
+
+
 void ClientFacade::logout()
 {
     if (chatService_) {
@@ -271,6 +282,11 @@ int ClientFacade::pendingFriendRequestCount() const
 int ClientFacade::notificationCount() const
 {
     return pendingFriendRequestCount() + pendingGroupInviteCount();
+}
+
+int ClientFacade::unreadMessageCount() const
+{
+    return conversations_ ? conversations_->totalUnreadCount() : 0;
 }
 
 void ClientFacade::createGroup(const QString &name, const QStringList &memberAccounts)

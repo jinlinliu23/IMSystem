@@ -1,4 +1,5 @@
 import QtQuick
+import client
 
 Item {
     width: parent.width
@@ -8,7 +9,6 @@ Item {
 
     readonly property int pendingRequestCount:
         (typeof ClientFacade !== "undefined") ? ClientFacade.pendingFriendRequestCount : 0
-
     Item {
         id: header
         height: 48
@@ -91,30 +91,73 @@ Item {
                 color: listTap.pressed ? "lightgrey" : "transparent"
             }
 
-            Column {
+            Row {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left
                 anchors.leftMargin: 16
-                Text {
-                    text: model.name
-                    font.pixelSize: 16
-                    color: t.text
+                spacing: 12
+
+                ImAvatar {
+                    size: 44
+                    isGroup: model.isGroup
+                    displayName: model.name
+                    seed: model.isGroup ? ("g:" + model.groupId) : model.peerAccount
+                    themePrimary: t.primary
                 }
-                Text {
-                    text: model.last
-                    font.pixelSize: 13
-                    color: "#999"
+
+                Column {
+                    width: conversationList.width - 16 - 44 - 12 - 72
+                    Text {
+                        text: model.name
+                        font.pixelSize: 16
+                        font.bold: model.hasUnread && !model.dissolved
+                        color: model.dissolved ? "#aaa" : t.text
+                    }
+                    Text {
+                        width: parent.width
+                        text: model.dissolved ? "该群已解散" : model.last
+                        font.pixelSize: 13
+                        font.bold: model.hasUnread && !model.dissolved
+                        color: model.dissolved ? "#c0392b" : (model.hasUnread ? "#333" : "#999")
+                        elide: Text.ElideRight
+                    }
                 }
             }
 
-            Text {
-                text: model.time
-                font.pixelSize: 12
-                color: "#aaa"
+            Column {
                 anchors.right: parent.right
                 anchors.rightMargin: 16
                 anchors.verticalCenter: parent.verticalCenter
-                visible: model.time.length > 0
+                spacing: 6
+
+                Text {
+                    text: model.time
+                    font.pixelSize: 12
+                    color: "#aaa"
+                    visible: model.time.length > 0 && !model.dissolved
+                    anchors.right: parent.right
+                }
+
+                Rectangle {
+                    readonly property int badgeDiameter: 20
+                    width: model.unreadCount > 9
+                           ? Math.max(badgeDiameter, unreadBadge.implicitWidth + 10)
+                           : badgeDiameter
+                    height: badgeDiameter
+                    radius: height / 2
+                    color: "#e74c3c"
+                    visible: model.hasUnread && !model.dissolved
+                    anchors.right: parent.right
+
+                    Text {
+                        id: unreadBadge
+                        anchors.centerIn: parent
+                        text: model.unreadCount > 99 ? "99+" : String(model.unreadCount)
+                        color: "#fff"
+                        font.pixelSize: 10
+                        font.bold: true
+                    }
+                }
             }
 
             TapHandler {

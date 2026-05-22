@@ -435,28 +435,24 @@ void ContactService::syncConversationsFromContacts()
         return;
     }
 
-    QVector<QVariantMap> rows;
     const int count = contacts_->rowCount();
-    rows.reserve(count);
     for (int i = 0; i < count; ++i) {
         const QModelIndex idx = contacts_->index(i);
         const QString account = contacts_->data(idx, ContactListModel::AccountRole).toString();
         const QString nickname = contacts_->data(idx, ContactListModel::NicknameRole).toString();
-        QVariantMap row;
         const QString oldLast = conversations_->lastMessageOf(account);
         const QString oldTime = conversations_->timeOf(account);
         const bool hasChat = !oldLast.isEmpty()
                              && oldLast != QStringLiteral("点击开始聊天");
 
-        row.insert(QStringLiteral("conversationId"), account);
-        row.insert(QStringLiteral("peerAccount"), account);
-        row.insert(QStringLiteral("title"), nickname.isEmpty() ? account : nickname);
-        row.insert(QStringLiteral("lastMessage"),
-                   hasChat ? oldLast : QStringLiteral("点击开始聊天"));
-        row.insert(QStringLiteral("time"), hasChat ? oldTime : QString());
-        rows.append(row);
+        conversations_->upsertFriendConversation(
+            account,
+            nickname.isEmpty() ? account : nickname,
+            hasChat ? oldLast : QStringLiteral("点击开始聊天"),
+            hasChat ? oldTime : QString(),
+            0,
+            conversations_->unreadCountOf(account));
     }
-    conversations_->setConversations(rows);
 }
 
 void ContactService::clearLocalData()

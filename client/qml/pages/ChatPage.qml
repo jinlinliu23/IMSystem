@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import client
 
 Page {
     width: parent.width
@@ -18,10 +19,15 @@ Page {
     readonly property color colorPeerText: "#333333"
     readonly property color colorInputBg: "#F5F5F5"
     readonly property color colorSendBtn: "#4A90D9"
+    readonly property int avatarSize: 36
 
     Component.onCompleted: {
-        if (typeof ClientFacade !== "undefined" && peerAccount.length > 0)
-            ClientFacade.openChat(peerAccount, target)
+        if (typeof ClientFacade !== "undefined") {
+            if (isGroup && groupId > 0)
+                ClientFacade.fetchGroupInfo(groupId)
+            if (peerAccount.length > 0)
+                ClientFacade.openChat(peerAccount, target)
+        }
     }
 
     Item {
@@ -73,32 +79,78 @@ Page {
         model: (typeof ClientFacade !== "undefined") ? ClientFacade.messages : null
 
         delegate: Item {
+            id: msgRow
             width: messageList.width
-            height: Math.max(msgText.paintedHeight + 18, 36)
+            readonly property bool isMine: model.who === "me"
+            readonly property bool showSenderLabel: isGroup && !isMine && (model.senderName || "").length > 0
+            readonly property string avatarNick: isMine
+                ? ((typeof ClientFacade !== "undefined" && ClientFacade.currentUser)
+                   ? ClientFacade.currentUser.nickname : "")
+                : ((model.senderName || "").length > 0 ? model.senderName : target)
+            readonly property string avatarSeed: isMine
+                ? ((typeof ClientFacade !== "undefined" && ClientFacade.currentUser)
+                   ? ClientFacade.currentUser.account : "")
+                : ((model.senderAccount || "").length > 0 ? model.senderAccount : peerAccount)
 
-            Rectangle {
-                id: bubble
-                anchors.right: model.who === "me" ? parent.right : undefined
-                anchors.left: model.who !== "me" ? parent.left : undefined
-                anchors.rightMargin: model.who === "me" ? 12 : 0
-                anchors.leftMargin: model.who !== "me" ? 12 : 0
-                anchors.verticalCenter: parent.verticalCenter
-                width: Math.min(msgText.paintedWidth + 24, messageList.width * 0.75)
-                height: msgText.paintedHeight + 16
-                radius: 8
-                color: model.who === "me" ? colorMyBubble : colorPeerBubble
-                border.color: model.who === "me" ? "transparent" : "#E0E0E0"
-                border.width: model.who === "me" ? 0 : 1
-            }
+            height: rowLayout.height + (showSenderLabel ? 20 : 0) + 4
 
             Text {
-                id: msgText
-                text: model.text
-                font.pixelSize: 15
-                color: model.who === "me" ? colorMyText : colorPeerText
-                wrapMode: Text.WordWrap
-                width: Math.min(messageList.width * 0.75 - 24, implicitWidth)
-                anchors.centerIn: bubble
+                id: senderLabel
+                text: model.senderName || ""
+                font.pixelSize: 12
+                color: "#888"
+                visible: showSenderLabel
+                anchors.left: parent.left
+                anchors.leftMargin: 16 + avatarSize + 8
+                anchors.top: parent.top
+                anchors.topMargin: 2
+            }
+
+            Row {
+                id: rowLayout
+                anchors.top: showSenderLabel ? senderLabel.bottom : parent.top
+                anchors.topMargin: showSenderLabel ? 4 : 0
+                anchors.left: isMine ? undefined : parent.left
+                anchors.right: isMine ? parent.right : undefined
+                anchors.leftMargin: isMine ? 0 : 12
+                anchors.rightMargin: isMine ? 12 : 0
+                spacing: 8
+
+                ImAvatar {
+                    visible: !isMine
+                    size: avatarSize
+                    displayName: avatarNick
+                    seed: avatarSeed
+                    themePrimary: theme ? theme.primary : "#4A90D9"
+                }
+
+                Rectangle {
+                    id: bubble
+                    width: Math.min(msgText.paintedWidth + 24, messageList.width * 0.65)
+                    height: msgText.paintedHeight + 16
+                    radius: 8
+                    color: isMine ? colorMyBubble : colorPeerBubble
+                    border.color: isMine ? "transparent" : "#E0E0E0"
+                    border.width: isMine ? 0 : 1
+
+                    Text {
+                        id: msgText
+                        text: model.text
+                        font.pixelSize: 15
+                        color: isMine ? colorMyText : colorPeerText
+                        wrapMode: Text.WordWrap
+                        width: Math.min(messageList.width * 0.65 - 24, implicitWidth)
+                        anchors.centerIn: parent
+                    }
+                }
+
+                ImAvatar {
+                    visible: isMine
+                    size: avatarSize
+                    displayName: avatarNick
+                    seed: avatarSeed
+                    themePrimary: theme ? theme.primary : "#4A90D9"
+                }
             }
         }
 
@@ -171,7 +223,10 @@ Page {
                     onTapped: {
                         var msg = messageInput.text.trim()
                         if (msg !== "" && typeof ClientFacade !== "undefined") {
-                            ClientFacade.sendPrivateMessage(msg)
+                            if (isGroup)
+                                ClientFacade.sendGroupMessage(groupId, msg)
+                            else
+                                ClientFacade.sendPrivateMessage(msg)
                             messageInput.text = ""
                         }
                     }
@@ -189,6 +244,12 @@ Page {
         function onChatHistoryLoaded() {
             if (messageList.count > 0)
                 messageList.positionViewAtEnd()
+        }
+        function onGroupInfoLoaded(success, message, gid, name, members) {
+            if (!success)
+                return
+            if (isGroup && gid === groupId)
+                target = name.length > 0 ? name : target
         }
     }
 }

@@ -9,6 +9,8 @@ Item {
 
     readonly property int notificationCount:
         (typeof ClientFacade !== "undefined") ? ClientFacade.notificationCount : 0
+    readonly property int unreadMessageCount:
+        (typeof ClientFacade !== "undefined") ? ClientFacade.unreadMessageCount : 0
 
     MessagesPage {
         id: messagesPage
@@ -56,9 +58,9 @@ Item {
 
             Repeater {
                 model: [
-                    { name: "消息", idx: 0, showBadge: false },
-                    { name: "联系人", idx: 1, showBadge: true },
-                    { name: "我", idx: 2, showBadge: false }
+                    { name: "消息", idx: 0, badgeCount: unreadMessageCount },
+                    { name: "联系人", idx: 1, badgeCount: notificationCount },
+                    { name: "我", idx: 2, badgeCount: 0 }
                 ]
 
                 Item {
@@ -79,15 +81,24 @@ Item {
                     }
 
                     Rectangle {
-                        width: 8
-                        height: 8
-                        radius: 4
+                        width: modelData.badgeCount > 9 ? 18 : (modelData.badgeCount > 0 ? 8 : 0)
+                        height: modelData.badgeCount > 9 ? 18 : 8
+                        radius: modelData.badgeCount > 9 ? 9 : 4
                         color: "#e74c3c"
-                        visible: modelData.showBadge && notificationCount > 0
+                        visible: modelData.badgeCount > 0
                         anchors.left: tabLabel.right
                         anchors.leftMargin: 2
                         anchors.top: tabLabel.top
-                        anchors.topMargin: -2
+                        anchors.topMargin: modelData.badgeCount > 9 ? -6 : -2
+
+                        Text {
+                            anchors.centerIn: parent
+                            visible: modelData.badgeCount > 9
+                            text: modelData.badgeCount > 99 ? "99+" : String(modelData.badgeCount)
+                            color: "#fff"
+                            font.pixelSize: 9
+                            font.bold: true
+                        }
                     }
 
                     TapHandler {

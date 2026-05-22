@@ -1,4 +1,5 @@
 import QtQuick
+import client
 
 Item {
     width: parent.width
@@ -190,16 +191,12 @@ Item {
                         anchors.leftMargin: 16
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 10
-                        Rectangle {
-                            width: 40
-                            height: 40
-                            radius: 6
-                            color: "#e8f4fc"
-                            Text {
-                                text: "群"
-                                anchors.centerIn: parent
-                                color: t.primary
-                            }
+                        ImAvatar {
+                            size: 40
+                            isGroup: true
+                            displayName: model.name
+                            seed: "g:" + model.groupId
+                            themePrimary: t.primary
                         }
                         Column {
                             Text { text: model.name; font.pixelSize: 16; color: t.text }
@@ -251,19 +248,31 @@ Item {
                 delegate: Item {
                     width: contactList.width
                     height: 56
-                    Column {
+
+                    Row {
                         anchors.left: parent.left
                         anchors.leftMargin: 16
                         anchors.verticalCenter: parent.verticalCenter
-                        Text {
-                            text: model.nickname || model.account
-                            font.pixelSize: 16
-                            color: t.text
+                        spacing: 10
+
+                        ImAvatar {
+                            size: 40
+                            displayName: model.nickname
+                            seed: model.account
+                            themePrimary: t.primary
                         }
-                        Text {
-                            text: model.account
-                            font.pixelSize: 12
-                            color: "#999"
+
+                        Column {
+                            Text {
+                                text: model.nickname || model.account
+                                font.pixelSize: 16
+                                color: t.text
+                            }
+                            Text {
+                                text: model.account
+                                font.pixelSize: 12
+                                color: "#999"
+                            }
                         }
                     }
                 }

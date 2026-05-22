@@ -7,6 +7,7 @@
 #include "network/clientmessagerouter.h"
 #include "msg_ids.h"
 
+#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -61,10 +62,8 @@ void GroupService::clearLocalData()
     if (groups_) {
         groups_->clear();
     }
-    if (conversations_) {
-        conversations_->setConversations({});
-    }
 }
+
 
 void GroupService::applyGroupList(const QJsonArray &arr)
 {
@@ -170,7 +169,7 @@ void GroupService::refreshMyGroups()
         return;
     }
     if (router_->busy()) {
-        QTimer::singleShot(120, this, [this]() { refreshMyGroups(); });
+        QTimer::singleShot(150, this, [this]() { refreshMyGroups(); });
         return;
     }
 
@@ -267,8 +266,54 @@ void GroupService::fetchGroupInfo(qint64 groupId)
 
 void GroupService::sendGroupMessage(qint64 groupId, const QString &content)
 {
-    Q_UNUSED(groupId)
-    Q_UNUSED(content)
+    if (!settings_ || !router_ || !currentUser_) {
+        return;
+    }
+    if (!ensureLoggedIn()) {
+        return;
+    }
+    if (groupId <= 0 || content.trimmed().isEmpty()) {
+        return;
+    }
+    if (router_->busy()) {
+        QTimer::singleShot(120, this, [this, groupId, content]() { sendGroupMessage(groupId, content); });
+        return;
+    }
+
+    QJsonObject req;
+    req.insert(QStringLiteral("group_id"), groupId);
+    req.insert(QStringLiteral("from_account"), currentUser_->account());
+    req.insert(QStringLiteral("content"), content.trimmed());
+    const QByteArray body = QJsonDocument(req).toJson(QJsonDocument::Compact);
+
+    router_->request(
+        settings_->serverHost(),
+        static_cast<quint16>(settings_->serverPort()),
+        static_cast<quint16>(MSG_IDS::MSG_SEND_GROUP),
+        body,
+        static_cast<quint16>(MSG_IDS::MSG_SEND_GROUP_RSP),
+        [this, groupId, content](const QByteArray &rspBody) {
+            QJsonObject obj;
+            QString err;
+            if (!parseResponseObject(rspBody, &obj, &err)) {
+                emit sendGroupMessageFinished(false, err);
+                return;
+            }
+            const int code = obj.value(QStringLiteral("code")).toInt(-1);
+            const QString msg = obj.value(QStringLiteral("msg")).toString(QStringLiteral("发送失败"));
+            if (code != static_cast<int>(API_CODE::OK)) {
+                emit sendGroupMessageFinished(false, msg);
+                return;
+            }
+            const qint64 createdAt = obj.value(QStringLiteral("created_at")).toInteger(
+                QDateTime::currentSecsSinceEpoch());
+            const qint64 messageId = obj.value(QStringLiteral("message_id")).toInteger(0);
+            emit groupMessageSent(groupId, content.trimmed(), createdAt, messageId);
+            emit sendGroupMessageFinished(true, msg);
+        },
+        [this](const QString &message) {
+            emit sendGroupMessageFinished(false, message);
+        });
 }
 
 void GroupService::refreshMyGroupsDeferred()

@@ -15,6 +15,7 @@ struct ChatPreview {
 
 struct ChatLocalRecord {
     QString fromAccount;
+    QString fromNickname;
     QString content;
     qint64 createdAt = 0;
     qint64 serverMessageId = 0;
@@ -29,6 +30,7 @@ struct ChatConversationInfo {
     QString groupName;
     bool dissolved = false;
     qint64 lastMessageAt = 0;
+    int unreadCount = 0;
 };
 
 /**
@@ -51,7 +53,8 @@ public:
                        const QString &fromAccount,
                        const QString &content,
                        qint64 createdAt,
-                       qint64 serverMessageId);
+                       qint64 serverMessageId,
+                       const QString &fromNickname = QString());
 
     QVector<ChatLocalRecord> listMessages(const QString &peerAccount, int limit = 500) const;
 
@@ -66,6 +69,9 @@ public:
                                 const QString &groupName,
                                 bool dissolved,
                                 qint64 lastMessageAt);
+    int unreadCount(const QString &conversationId) const;
+    bool setUnreadCount(const QString &conversationId, int count);
+    bool incrementUnread(const QString &conversationId);
     QVector<ChatConversationInfo> listConversations() const;
 
 private:

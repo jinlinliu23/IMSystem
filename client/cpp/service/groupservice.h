@@ -5,6 +5,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
+#include <QTimer>
 
 class ClientSettings;
 class ClientMessageRouter;
@@ -25,13 +26,15 @@ public:
 
     void createGroup(const QString &name, const QStringList &memberAccounts);
     void refreshMyGroups();
+    void refreshMyGroupsDeferred();
     void fetchGroupInfo(qint64 groupId);
     void sendGroupMessage(qint64 groupId, const QString &content);
     void clearLocalData();
-    void refreshMyGroupsDeferred();
 
 signals:
     void createGroupFinished(bool success, const QString &message, qint64 groupId);
+    void sendGroupMessageFinished(bool success, const QString &message);
+    void groupMessageSent(qint64 groupId, const QString &content, qint64 createdAt, qint64 messageId);
     void groupListUpdated();
     void groupInfoLoaded(bool success,
                          const QString &message,

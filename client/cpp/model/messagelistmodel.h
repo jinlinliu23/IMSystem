@@ -14,6 +14,8 @@ public:
     enum Roles {
         WhoRole = Qt::UserRole + 1,
         TextRole,
+        SenderNameRole,
+        SenderAccountRole,
     };
 
     explicit MessageListModel(QObject *parent = nullptr);
@@ -23,13 +25,18 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     Q_INVOKABLE void clear();
-    Q_INVOKABLE void appendMessage(const QString &who, const QString &text);
+    Q_INVOKABLE void appendMessage(const QString &who,
+                                   const QString &text,
+                                   const QString &senderName = QString(),
+                                   const QString &senderAccount = QString());
     void setMessages(const QVector<QPair<QString, QString>> &rows);
 
 private:
     struct Item {
         QString who;
         QString text;
+        QString senderName;
+        QString senderAccount;
     };
 
     QVector<Item> items_;
