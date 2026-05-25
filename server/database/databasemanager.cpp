@@ -899,6 +899,117 @@ std::optional<int64_t> DatabaseManager::createGroup(const std::string &name,
     return groupId;
 }
 
+bool DatabaseManager::inviteUsersToGroup(int64_t groupId,
+                                         int64_t inviterUserId,
+                                         const std::vector<int64_t> &inviteeUserIds)
+{
+    if (groupId <= 0 || inviterUserId <= 0 || inviteeUserIds.empty()) {
+        return false;
+    }
+    if (!isGroupMember(groupId, inviterUserId)) {
+        return false;
+    }
+
+    if (!execSql(db_, "BEGIN IMMEDIATE;")) {
+        return false;
+    }
+
+    const char *insertSql =
+        "INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, 'member');";
+    sqlite3_stmt *stmt = nullptr;
+    for (const int64_t inviteeId : inviteeUserIds) {
+        if (inviteeId <= 0 || inviteeId == inviterUserId || isGroupMember(groupId, inviteeId)) {
+            continue;
+        }
+        if (sqlite3_prepare_v2(db_, insertSql, -1, &stmt, nullptr) != SQLITE_OK) {
+            execSql(db_, "ROLLBACK;");
+            return false;
+        }
+        sqlite3_bind_int64(stmt, 1, groupId);
+        sqlite3_bind_int64(stmt, 2, inviteeId);
+        if (sqlite3_step(stmt) != SQLITE_DONE) {
+            sqlite3_finalize(stmt);
+            execSql(db_, "ROLLBACK;");
+            return false;
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    if (!execSql(db_, "COMMIT;")) {
+        execSql(db_, "ROLLBACK;");
+        return false;
+    }
+    return true;
+}
+
+bool DatabaseManager::leaveGroup(int64_t groupId, int64_t userId, bool *dissolved)
+{
+    if (dissolved) {
+        *dissolved = false;
+    }
+    if (groupId <= 0 || userId <= 0 || !isGroupMember(groupId, userId)) {
+        return false;
+    }
+    if (!execSql(db_, "BEGIN IMMEDIATE;")) {
+        return false;
+    }
+
+    sqlite3_stmt *stmt = nullptr;
+    const char *deleteSql = "DELETE FROM group_members WHERE group_id = ? AND user_id = ?;";
+    if (sqlite3_prepare_v2(db_, deleteSql, -1, &stmt, nullptr) != SQLITE_OK) {
+        execSql(db_, "ROLLBACK;");
+        return false;
+    }
+    sqlite3_bind_int64(stmt, 1, groupId);
+    sqlite3_bind_int64(stmt, 2, userId);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        sqlite3_finalize(stmt);
+        execSql(db_, "ROLLBACK;");
+        return false;
+    }
+    sqlite3_finalize(stmt);
+
+    const char *countSql = "SELECT COUNT(*) FROM group_members WHERE group_id = ?;";
+    if (sqlite3_prepare_v2(db_, countSql, -1, &stmt, nullptr) != SQLITE_OK) {
+        execSql(db_, "ROLLBACK;");
+        return false;
+    }
+    sqlite3_bind_int64(stmt, 1, groupId);
+    int memberCount = -1;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        memberCount = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+    if (memberCount < 0) {
+        execSql(db_, "ROLLBACK;");
+        return false;
+    }
+
+    if (memberCount == 0) {
+        const char *deleteGroupSql = "DELETE FROM groups WHERE id = ?;";
+        if (sqlite3_prepare_v2(db_, deleteGroupSql, -1, &stmt, nullptr) != SQLITE_OK) {
+            execSql(db_, "ROLLBACK;");
+            return false;
+        }
+        sqlite3_bind_int64(stmt, 1, groupId);
+        if (sqlite3_step(stmt) != SQLITE_DONE) {
+            sqlite3_finalize(stmt);
+            execSql(db_, "ROLLBACK;");
+            return false;
+        }
+        sqlite3_finalize(stmt);
+        if (dissolved) {
+            *dissolved = true;
+        }
+    }
+
+    if (!execSql(db_, "COMMIT;")) {
+        execSql(db_, "ROLLBACK;");
+        return false;
+    }
+    return true;
+}
+
 std::vector<GroupSummaryRecord> DatabaseManager::listMyGroups(int64_t userId)
 {
     std::vector<GroupSummaryRecord> result;

@@ -81,6 +81,8 @@ public:
     Q_INVOKABLE void sendPrivateMessage(const QString &content);
     Q_INVOKABLE void sendGroupMessage(qint64 groupId, const QString &content);
     Q_INVOKABLE void createGroup(const QString &name, const QStringList &memberAccounts);
+    Q_INVOKABLE void inviteGroupMembers(qint64 groupId, const QStringList &memberAccounts);
+    Q_INVOKABLE void leaveGroup(qint64 groupId);
     Q_INVOKABLE void refreshMyGroups();
     Q_INVOKABLE void fetchGroupInfo(qint64 groupId);
 

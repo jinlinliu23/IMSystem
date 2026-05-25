@@ -35,6 +35,16 @@ void pushGroupEvent(const std::string &fromAccount,
         payload.toStyledString());
 }
 
+std::vector<std::string> getGroupMemberAccounts(const GroupInfoRecord &info)
+{
+    std::vector<std::string> accounts;
+    accounts.reserve(info.members.size());
+    for (const auto &m : info.members) {
+        accounts.push_back(m.account);
+    }
+    return accounts;
+}
+
 } // namespace
 
 void CreateGroupHandler::handle(std::shared_ptr<TcpConnection> tc,
@@ -286,6 +296,214 @@ void GroupInfoHandler::handle(std::shared_ptr<TcpConnection> tc,
     rsp["name"] = info->name;
     rsp["dissolved"] = info->dissolved;
     rsp["members"] = members;
+    sendJsonResponse(tc, rspId, rsp);
+}
+
+void InviteGroupHandler::handle(std::shared_ptr<TcpConnection> tc,
+                                const short & /*msg_id*/,
+                                const std::string &msg_data)
+{
+    Json::Reader reader;
+    Json::Value root;
+    Json::Value rsp;
+    const auto rspId = static_cast<uint16_t>(MSG_IDS::MSG_INVITE_GROUP_RSP);
+
+    if (!reader.parse(msg_data, root)) {
+        rsp["code"] = static_cast<int>(API_CODE::INVALID_PARAMS);
+        rsp["msg"] = "请求格式错误";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+    if (!root.isMember("group_id") || !root.isMember("inviter_account")
+        || !root.isMember("invitee_accounts")) {
+        rsp["code"] = static_cast<int>(API_CODE::INVALID_PARAMS);
+        rsp["msg"] = "缺少必填字段";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+
+    const int64_t groupId = root["group_id"].asInt64();
+    const std::string inviterAccount = root["inviter_account"].asString();
+    const Json::Value &inviteeArr = root["invitee_accounts"];
+    if (groupId <= 0 || inviterAccount.empty() || !inviteeArr.isArray()) {
+        rsp["code"] = static_cast<int>(API_CODE::INVALID_PARAMS);
+        rsp["msg"] = "参数不合法";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+
+    auto db = DatabaseManager::GetInstance();
+    const auto inviter = db->findUserByAccount(inviterAccount);
+    if (!inviter.has_value()) {
+        rsp["code"] = static_cast<int>(API_CODE::USER_NOT_FOUND);
+        rsp["msg"] = "邀请人不存在";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+    if (!db->groupExists(groupId)) {
+        rsp["code"] = static_cast<int>(API_CODE::GROUP_NOT_FOUND);
+        rsp["msg"] = "群不存在";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+    if (!db->isGroupMember(groupId, inviter->id)) {
+        rsp["code"] = static_cast<int>(API_CODE::NOT_GROUP_MEMBER);
+        rsp["msg"] = "你不是群成员";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+
+    const auto info = db->getGroupInfo(groupId, inviter->id);
+    if (!info.has_value()) {
+        rsp["code"] = static_cast<int>(API_CODE::GROUP_NOT_FOUND);
+        rsp["msg"] = "群不存在";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+
+    std::vector<int64_t> inviteeIds;
+    std::vector<std::string> notifyAccounts;
+    for (const auto &v : inviteeArr) {
+        if (!v.isString()) continue;
+        const std::string account = v.asString();
+        if (account.empty()) continue;
+        const auto user = db->findUserByAccount(account);
+        if (!user.has_value()) {
+            rsp["code"] = static_cast<int>(API_CODE::USER_NOT_FOUND);
+            rsp["msg"] = "成员不存在: " + account;
+            sendJsonResponse(tc, rspId, rsp);
+            return;
+        }
+        if (!db->areFriends(inviter->id, user->id)) {
+            rsp["code"] = static_cast<int>(API_CODE::NOT_YOUR_FRIEND);
+            rsp["msg"] = "只能邀请自己的好友: " + account;
+            sendJsonResponse(tc, rspId, rsp);
+            return;
+        }
+        if (db->isGroupMember(groupId, user->id)) {
+            rsp["code"] = static_cast<int>(API_CODE::ALREADY_IN_GROUP);
+            rsp["msg"] = "已在群中: " + account;
+            sendJsonResponse(tc, rspId, rsp);
+            return;
+        }
+        inviteeIds.push_back(user->id);
+        notifyAccounts.push_back(account);
+    }
+
+    if (inviteeIds.empty()) {
+        rsp["code"] = static_cast<int>(API_CODE::INVALID_PARAMS);
+        rsp["msg"] = "没有可邀请的成员";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+
+    if (!db->inviteUsersToGroup(groupId, inviter->id, inviteeIds)) {
+        rsp["code"] = static_cast<int>(API_CODE::DB_ERROR);
+        rsp["msg"] = "邀请失败";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+
+    const int64_t createdAt = static_cast<int64_t>(std::time(nullptr));
+    Json::Value event;
+    event["type"] = "member_joined";
+    event["group_id"] = static_cast<Json::Int64>(groupId);
+    event["group_name"] = info->name;
+    event["account"] = inviterAccount;
+    event["created_at"] = static_cast<Json::Int64>(createdAt);
+    pushGroupEvent(inviterAccount, notifyAccounts, event);
+
+    rsp["code"] = static_cast<int>(API_CODE::OK);
+    rsp["msg"] = "邀请成功";
+    sendJsonResponse(tc, rspId, rsp);
+}
+
+void LeaveGroupHandler::handle(std::shared_ptr<TcpConnection> tc,
+                               const short & /*msg_id*/,
+                               const std::string &msg_data)
+{
+    Json::Reader reader;
+    Json::Value root;
+    Json::Value rsp;
+    const auto rspId = static_cast<uint16_t>(MSG_IDS::MSG_LEAVE_GROUP_RSP);
+
+    if (!reader.parse(msg_data, root)) {
+        rsp["code"] = static_cast<int>(API_CODE::INVALID_PARAMS);
+        rsp["msg"] = "请求格式错误";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+    if (!root.isMember("group_id") || !root.isMember("account")) {
+        rsp["code"] = static_cast<int>(API_CODE::INVALID_PARAMS);
+        rsp["msg"] = "缺少必填字段";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+
+    const int64_t groupId = root["group_id"].asInt64();
+    const std::string account = root["account"].asString();
+    if (groupId <= 0 || account.empty()) {
+        rsp["code"] = static_cast<int>(API_CODE::INVALID_PARAMS);
+        rsp["msg"] = "参数不合法";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+
+    auto db = DatabaseManager::GetInstance();
+    const auto user = db->findUserByAccount(account);
+    if (!user.has_value()) {
+        rsp["code"] = static_cast<int>(API_CODE::USER_NOT_FOUND);
+        rsp["msg"] = "用户不存在";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+    if (!db->groupExists(groupId)) {
+        rsp["code"] = static_cast<int>(API_CODE::GROUP_NOT_FOUND);
+        rsp["msg"] = "群不存在";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+    if (!db->isGroupMember(groupId, user->id)) {
+        rsp["code"] = static_cast<int>(API_CODE::NOT_GROUP_MEMBER);
+        rsp["msg"] = "你不是群成员";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+
+    const auto info = db->getGroupInfo(groupId, user->id);
+    if (!info.has_value()) {
+        rsp["code"] = static_cast<int>(API_CODE::GROUP_NOT_FOUND);
+        rsp["msg"] = "群不存在";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+
+    bool dissolved = false;
+    if (!db->leaveGroup(groupId, user->id, &dissolved)) {
+        rsp["code"] = static_cast<int>(API_CODE::DB_ERROR);
+        rsp["msg"] = "退群失败";
+        sendJsonResponse(tc, rspId, rsp);
+        return;
+    }
+
+    std::vector<std::string> notifyAccounts;
+    for (const auto &m : info->members) {
+        if (m.account != account) {
+            notifyAccounts.push_back(m.account);
+        }
+    }
+
+    Json::Value event;
+    event["type"] = dissolved ? "group_dissolved" : "member_left";
+    event["group_id"] = static_cast<Json::Int64>(groupId);
+    event["group_name"] = info->name;
+    event["account"] = account;
+    event["created_at"] = static_cast<Json::Int64>(std::time(nullptr));
+    pushGroupEvent(account, notifyAccounts, event);
+
+    rsp["code"] = static_cast<int>(API_CODE::OK);
+    rsp["msg"] = dissolved ? "群已解散" : "已退群";
+    rsp["dissolved"] = dissolved;
     sendJsonResponse(tc, rspId, rsp);
 }
 

@@ -64,7 +64,6 @@ void GroupService::clearLocalData()
     }
 }
 
-
 void GroupService::applyGroupList(const QJsonArray &arr)
 {
     QVector<QVariantMap> rows;
@@ -262,6 +261,102 @@ void GroupService::fetchGroupInfo(qint64 groupId)
         [this, groupId](const QString &message) {
             emit groupInfoLoaded(false, message, groupId, {}, {});
         });
+}
+
+void GroupService::inviteMembers(qint64 groupId, const QStringList &inviteeAccounts)
+{
+    if (!settings_ || !router_ || !currentUser_ || !ensureLoggedIn()) {
+        emit inviteMembersFinished(false, QStringLiteral("请先登录"));
+        return;
+    }
+    if (groupId <= 0 || inviteeAccounts.isEmpty()) {
+        emit inviteMembersFinished(false, QStringLiteral("请选择要邀请的好友"));
+        return;
+    }
+    if (router_->busy()) {
+        emit inviteMembersFinished(false, QStringLiteral("请稍候，正在处理上一请求"));
+        return;
+    }
+
+    QJsonArray arr;
+    for (const auto &acc : inviteeAccounts) {
+        const QString trimmed = acc.trimmed();
+        if (!trimmed.isEmpty()) {
+            arr.append(trimmed);
+        }
+    }
+    if (arr.isEmpty()) {
+        emit inviteMembersFinished(false, QStringLiteral("请选择要邀请的好友"));
+        return;
+    }
+
+    QJsonObject req;
+    req.insert(QStringLiteral("group_id"), groupId);
+    req.insert(QStringLiteral("inviter_account"), currentUser_->account());
+    req.insert(QStringLiteral("invitee_accounts"), arr);
+    const QByteArray body = QJsonDocument(req).toJson(QJsonDocument::Compact);
+
+    router_->request(
+        settings_->serverHost(),
+        static_cast<quint16>(settings_->serverPort()),
+        static_cast<quint16>(MSG_IDS::MSG_INVITE_GROUP),
+        body,
+        static_cast<quint16>(MSG_IDS::MSG_INVITE_GROUP_RSP),
+        [this](const QByteArray &rspBody) {
+            QJsonObject obj; QString err;
+            if (!parseResponseObject(rspBody, &obj, &err)) {
+                emit inviteMembersFinished(false, err);
+                return;
+            }
+            const int code = obj.value(QStringLiteral("code")).toInt(-1);
+            const QString msg = obj.value(QStringLiteral("msg")).toString(QStringLiteral("邀请失败"));
+            const bool ok = code == static_cast<int>(API_CODE::OK);
+            emit inviteMembersFinished(ok, msg);
+            if (ok) refreshMyGroupsDeferred();
+        },
+        [this](const QString &message) { emit inviteMembersFinished(false, message); });
+}
+
+void GroupService::leaveGroup(qint64 groupId)
+{
+    if (!settings_ || !router_ || !currentUser_ || !ensureLoggedIn()) {
+        emit leaveGroupFinished(false, QStringLiteral("请先登录"), false);
+        return;
+    }
+    if (groupId <= 0) {
+        emit leaveGroupFinished(false, QStringLiteral("群 ID 无效"), false);
+        return;
+    }
+    if (router_->busy()) {
+        emit leaveGroupFinished(false, QStringLiteral("请稍候，正在处理上一请求"), false);
+        return;
+    }
+
+    QJsonObject req;
+    req.insert(QStringLiteral("group_id"), groupId);
+    req.insert(QStringLiteral("account"), currentUser_->account());
+    const QByteArray body = QJsonDocument(req).toJson(QJsonDocument::Compact);
+
+    router_->request(
+        settings_->serverHost(),
+        static_cast<quint16>(settings_->serverPort()),
+        static_cast<quint16>(MSG_IDS::MSG_LEAVE_GROUP),
+        body,
+        static_cast<quint16>(MSG_IDS::MSG_LEAVE_GROUP_RSP),
+        [this](const QByteArray &rspBody) {
+            QJsonObject obj; QString err;
+            if (!parseResponseObject(rspBody, &obj, &err)) {
+                emit leaveGroupFinished(false, err, false);
+                return;
+            }
+            const int code = obj.value(QStringLiteral("code")).toInt(-1);
+            const QString msg = obj.value(QStringLiteral("msg")).toString(QStringLiteral("退群失败"));
+            const bool dissolved = obj.value(QStringLiteral("dissolved")).toBool(false);
+            const bool ok = code == static_cast<int>(API_CODE::OK);
+            emit leaveGroupFinished(ok, msg, dissolved);
+            if (ok) refreshMyGroupsDeferred();
+        },
+        [this](const QString &message) { emit leaveGroupFinished(false, message, false); });
 }
 
 void GroupService::sendGroupMessage(qint64 groupId, const QString &content)

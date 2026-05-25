@@ -12,7 +12,8 @@ QtObject {
         "AddFriendPage": "../pages/AddFriendPage.qml",
         "FriendRequestsPage": "../pages/FriendRequestsPage.qml",
         "CreateGroupPage": "../pages/CreateGroupPage.qml",
-        "GroupInfoPage": "../pages/GroupInfoPage.qml"
+        "GroupInfoPage": "../pages/GroupInfoPage.qml",
+        "InviteMemberPage": "../pages/InviteMemberPage.qml"
     })
 
     property var componentCache: ({})

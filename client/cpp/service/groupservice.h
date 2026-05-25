@@ -25,6 +25,8 @@ public:
                           QObject *parent = nullptr);
 
     void createGroup(const QString &name, const QStringList &memberAccounts);
+    void inviteMembers(qint64 groupId, const QStringList &inviteeAccounts);
+    void leaveGroup(qint64 groupId);
     void refreshMyGroups();
     void refreshMyGroupsDeferred();
     void fetchGroupInfo(qint64 groupId);
@@ -33,6 +35,8 @@ public:
 
 signals:
     void createGroupFinished(bool success, const QString &message, qint64 groupId);
+    void inviteMembersFinished(bool success, const QString &message);
+    void leaveGroupFinished(bool success, const QString &message, bool dissolved);
     void sendGroupMessageFinished(bool success, const QString &message);
     void groupMessageSent(qint64 groupId, const QString &content, qint64 createdAt, qint64 messageId);
     void groupListUpdated();

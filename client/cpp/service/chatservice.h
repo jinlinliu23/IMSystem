@@ -41,6 +41,8 @@ signals:
     void sendMessageFinished(bool success, const QString &message);
     void chatHistoryLoaded();
     void conversationPreviewUpdated();
+    void groupStructureChanged();
+    void groupEventsChanged();
 
 private:
     void handlePrivateNotify(const QByteArray &body);

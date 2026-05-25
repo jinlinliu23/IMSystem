@@ -125,6 +125,11 @@ public:
                                        int64_t ownerUserId,
                                        const std::vector<int64_t> &memberUserIds);
 
+    bool inviteUsersToGroup(int64_t groupId,
+                            int64_t inviterUserId,
+                            const std::vector<int64_t> &inviteeUserIds);
+    bool leaveGroup(int64_t groupId, int64_t userId, bool *dissolved = nullptr);
+
     std::vector<GroupSummaryRecord> listMyGroups(int64_t userId);
 
     std::optional<GroupInfoRecord> getGroupInfo(int64_t groupId, int64_t userId);

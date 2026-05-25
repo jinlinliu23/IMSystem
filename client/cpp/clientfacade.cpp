@@ -82,9 +82,26 @@ ClientFacade::ClientFacade(QObject *parent)
         emit notificationCountChanged();
     });
     connect(groupService_, &GroupService::createGroupFinished, this, &ClientFacade::createGroupFinished);
+    connect(groupService_, &GroupService::inviteMembersFinished, this, [this](bool success, const QString &message) {
+        if (success && groupService_) {
+            groupService_->refreshMyGroupsDeferred();
+        }
+        emit friendNotify(message);
+    });
+    connect(groupService_, &GroupService::leaveGroupFinished, this, [this](bool success, const QString &message, bool dissolved) {
+        Q_UNUSED(dissolved)
+        if (success && groupService_) {
+            groupService_->refreshMyGroupsDeferred();
+        }
+        emit friendNotify(message);
+    });
     connect(groupService_, &GroupService::sendGroupMessageFinished, this, &ClientFacade::sendMessageFinished);
     connect(groupService_, &GroupService::groupMessageSent, chatService_, &ChatService::onOwnGroupMessageSent);
     connect(groupService_, &GroupService::groupListUpdated, this, [this]() {
+        if (chatService_) {
+            chatService_->mergeLocalPreviewsIntoConversations();
+            chatService_->syncConversationsFromLocalStore();
+        }
         emit groupListUpdated();
         emit conversationsUpdated();
     });
@@ -98,6 +115,16 @@ ClientFacade::ClientFacade(QObject *parent)
     connect(chatService_, &ChatService::sendMessageFinished, this, &ClientFacade::sendMessageFinished);
     connect(chatService_, &ChatService::chatHistoryLoaded, this, &ClientFacade::chatHistoryLoaded);
     connect(chatService_, &ChatService::conversationPreviewUpdated, this, &ClientFacade::conversationsUpdated);
+    connect(chatService_, &ChatService::groupEventsChanged, this, [this]() {
+        if (groupService_) {
+            groupService_->refreshMyGroupsDeferred();
+        }
+        if (contactService_) {
+            contactService_->syncAfterLogin();
+        }
+        emit conversationsUpdated();
+        emit groupListUpdated();
+    });
     connect(conversations_, &ConversationListModel::totalUnreadChanged, this, &ClientFacade::unreadMessageCountChanged);
 
     qInfo() << "ClientFacade ready"
@@ -257,6 +284,19 @@ void ClientFacade::sendGroupMessage(qint64 groupId, const QString &content)
     }
 }
 
+void ClientFacade::inviteGroupMembers(qint64 groupId, const QStringList &memberAccounts)
+{
+    if (groupService_) {
+        groupService_->inviteMembers(groupId, memberAccounts);
+    }
+}
+
+void ClientFacade::leaveGroup(qint64 groupId)
+{
+    if (groupService_) {
+        groupService_->leaveGroup(groupId);
+    }
+}
 
 void ClientFacade::logout()
 {

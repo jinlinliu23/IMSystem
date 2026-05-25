@@ -287,30 +287,60 @@ void ChatService::handleGroupNotify(const QByteArray &body)
     const qint64 createdAt = root.value(QStringLiteral("created_at")).toInteger(
         QDateTime::currentSecsSinceEpoch());
     const qint64 messageId = root.value(QStringLiteral("message_id")).toInteger(0);
+    const QString conversationId = QStringLiteral("g:%1").arg(groupId);
 
-    if (type == QStringLiteral("group_dissolved")) {
+    if (type == QStringLiteral("group_created")) {
+        if (groupId <= 0) {
+            return;
+        }
+        const QString title = groupName.isEmpty() ? conversationId : groupName;
         if (localStore_) {
-            localStore_->upsertConversationMeta(QStringLiteral("g:%1").arg(groupId),
-                                               QStringLiteral("g:%1").arg(groupId),
-                                               groupName,
-                                               true,
-                                               groupId,
-                                               groupName,
-                                               true,
-                                               createdAt);
+            localStore_->upsertConversationMeta(conversationId,
+                                                conversationId,
+                                                title,
+                                                true,
+                                                groupId,
+                                                groupName,
+                                                false,
+                                                createdAt);
         }
         if (conversations_) {
-            conversations_->upsertGroupConversation(groupId, groupName, createdAt);
-            conversations_->markDissolved(groupId);
-            conversations_->clearUnread(QStringLiteral("g:%1").arg(groupId));
-            conversations_->updatePreview(QStringLiteral("g:%1").arg(groupId),
-                                          QStringLiteral("[已解散]"),
-                                          QString());
-        }
-        if (localStore_) {
-            localStore_->setUnreadCount(QStringLiteral("g:%1").arg(groupId), 0);
+            conversations_->upsertGroupConversation(groupId, title, createdAt);
         }
         emit conversationPreviewUpdated();
+        emit groupEventsChanged();
+        return;
+    }
+
+    if (type == QStringLiteral("member_joined") || type == QStringLiteral("member_left")
+        || type == QStringLiteral("group_dissolved")) {
+        if (type == QStringLiteral("group_dissolved")) {
+            if (localStore_) {
+                localStore_->upsertConversationMeta(conversationId,
+                                                    conversationId,
+                                                    groupName,
+                                                    true,
+                                                    groupId,
+                                                    groupName,
+                                                    true,
+                                                    createdAt);
+            }
+            if (conversations_) {
+                conversations_->upsertGroupConversation(groupId, groupName, createdAt);
+                conversations_->markDissolved(groupId);
+                conversations_->clearUnread(conversationId);
+                conversations_->updatePreview(conversationId, QStringLiteral("[已解散]"), QString());
+            }
+            if (localStore_) {
+                localStore_->setUnreadCount(conversationId, 0);
+            }
+        } else if (conversations_) {
+            conversations_->upsertGroupConversation(groupId,
+                                                     groupName.isEmpty() ? conversationId : groupName,
+                                                     createdAt);
+        }
+        emit conversationPreviewUpdated();
+        emit groupEventsChanged();
         return;
     }
 
@@ -318,7 +348,6 @@ void ChatService::handleGroupNotify(const QByteArray &body)
         return;
     }
 
-    const QString conversationId = QStringLiteral("g:%1").arg(groupId);
     const QString nick = resolveSenderNickname(fromAccount, fromNickname);
     persistMessage(conversationId, fromAccount, content, createdAt, messageId, nick);
     if (localStore_) {

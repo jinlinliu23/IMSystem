@@ -45,6 +45,10 @@ void MesRout::initHandlers()
         std::make_shared<GroupListHandler>();
     _fun_Handlers[static_cast<uint32_t>(MSG_IDS::MSG_GROUP_INFO)] =
         std::make_shared<GroupInfoHandler>();
+    _fun_Handlers[static_cast<uint32_t>(MSG_IDS::MSG_INVITE_GROUP)] =
+        std::make_shared<InviteGroupHandler>();
+    _fun_Handlers[static_cast<uint32_t>(MSG_IDS::MSG_LEAVE_GROUP)] =
+        std::make_shared<LeaveGroupHandler>();
     _fun_Handlers[static_cast<uint32_t>(MSG_IDS::MSG_SEND_GROUP)] =
         std::make_shared<SendGroupMessageHandler>();
 }

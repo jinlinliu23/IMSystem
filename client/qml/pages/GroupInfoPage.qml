@@ -9,6 +9,7 @@ Item {
     property int groupId: 0
     property string groupName: ""
     property var members: []
+    property bool canManage: true
 
     anchors.fill: parent
 
@@ -82,10 +83,58 @@ Item {
             }
         }
 
-        Text {
-            text: "群成员（" + members.length + "）"
-            font.pixelSize: 14
-            color: "#666"
+        Row {
+            width: parent.width
+            spacing: 8
+
+            Text {
+                text: "群成员（" + members.length + "）"
+                font.pixelSize: 14
+                color: "#666"
+            }
+
+            Item { width: 1; height: 1 }
+
+            Rectangle {
+                visible: canManage
+                width: 88
+                height: 28
+                radius: 6
+                color: theme ? theme.primary : "#4a90d9"
+                anchors.verticalCenter: parent.verticalCenter
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "邀请成员"
+                    color: "#fff"
+                    font.pixelSize: 12
+                }
+                TapHandler {
+                    onTapped: nav.push("InviteMemberPage", { groupId: groupId, groupName: groupName })
+                }
+            }
+
+            Rectangle {
+                visible: canManage
+                width: 72
+                height: 28
+                radius: 6
+                color: "#e74c3c"
+                anchors.verticalCenter: parent.verticalCenter
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "退群"
+                    color: "#fff"
+                    font.pixelSize: 12
+                }
+                TapHandler {
+                    onTapped: {
+                        if (typeof ClientFacade !== "undefined")
+                            ClientFacade.leaveGroup(groupId)
+                    }
+                }
+            }
         }
 
         ListView {
@@ -140,6 +189,19 @@ Item {
             }
             groupName = name
             members = memberList
+        }
+        function onLeaveGroupFinished(success, message, dissolved) {
+            appWindow.showAlert(message)
+            if (success && !dissolved) {
+                nav.pop()
+            }
+            if (success && dissolved) {
+                nav.pop()
+            }
+        }
+        function onFriendNotify(message) {
+            if (message && message.length > 0)
+                appWindow.showAlert(message)
         }
     }
 }
