@@ -1,5 +1,6 @@
 #include "service/chatservice.h"
 
+#include "ai/messageclassifier.h"  // [Feature 2] 智能消息标签
 #include "core/clientsettings.h"
 #include "model/contactlistmodel.h"
 #include "model/conversationlistmodel.h"
@@ -10,10 +11,12 @@
 #include "msg_ids.h"
 
 #include <QDateTime>
+#include <QDir>
 #include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QDebug>
+#include <QStandardPaths>
 
 namespace {
 
@@ -49,6 +52,10 @@ ChatService::ChatService(ClientSettings *settings,
     , contacts_(contacts)
     , localStore_(new ChatLocalStore(this))
 {
+    // [Feature 2] 创建朴素贝叶斯分类器，首次使用时 lazy-load 或种子训练
+    classifier_ = new MessageClassifier();
+    classifierModelPath_ = QStringLiteral("classifier_model.json");
+
     if (router_) {
         router_->registerPushHandler(static_cast<quint16>(MSG_IDS::MSG_NOTIFY_PRIVATE),
                                      [this](const QByteArray &body) {
@@ -440,6 +447,11 @@ void ChatService::loadLocalMessagesToUi(const QString &peerAccount)
     if (!lastPreview.isEmpty()) {
         updateConversationPreview(peerAccount, lastPreview, lastTime);
     }
+    // [Feature 2] 智能标签已开启 → 对加载的历史消息全量分类
+    if (smartTagEnabled_) {
+        ensureClassifierReady();
+        reclassifyCurrentMessages();
+    }
 }
 
 void ChatService::appendChatLine(const QString &who,
@@ -449,6 +461,11 @@ void ChatService::appendChatLine(const QString &who,
 {
     if (messages_) {
         messages_->appendMessage(who, text, senderName, senderAccount);
+        // [Feature 2] 智能标签已开启 → 对新消息增量分类
+        if (smartTagEnabled_) {
+            ensureClassifierReady();
+            messages_->reclassifyLast(classifier_);
+        }
     }
 }
 
@@ -639,4 +656,55 @@ qint64 ChatService::effectiveMessageId(qint64 serverMessageId,
                         + QLatin1Char('|') + QString::number(ts);
     const quint64 hash = qHash(key);
     return ts * 1000000LL + static_cast<qint64>(hash % 1000000ULL);
+}
+
+// ============================================================================
+// [Feature 2] 智能消息标签 — 分类器生命周期管理
+// ============================================================================
+
+// 确保分类器已训练（lazy init）：
+// 1. 先尝试从磁盘加载上次保存的模型
+// 2. 失败则用 40 条种子数据训练
+// 3. 训练后保存模型到磁盘
+void ChatService::ensureClassifierReady()
+{
+    if (!classifier_ || classifier_->trained()) {
+        return;
+    }
+
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    const QString modelPath = dir + QStringLiteral("/") + classifierModelPath_;
+
+    if (classifier_->load(modelPath)) {
+        return;
+    }
+
+    if (!classifier_->trained()) {
+        const auto seeds = MessageClassifier::seedSamples();
+        classifier_->train(seeds);
+    }
+
+    QDir().mkpath(dir);
+    classifier_->save(modelPath);
+}
+
+void ChatService::reclassifyCurrentMessages()
+{
+    if (!messages_ || !classifier_ || !classifier_->trained()) {
+        return;
+    }
+    messages_->reclassifyAll(classifier_);
+}
+
+void ChatService::setSmartTagEnabled(bool enabled)
+{
+    if (smartTagEnabled_ == enabled) {
+        return;
+    }
+    smartTagEnabled_ = enabled;
+    if (enabled) {
+        ensureClassifierReady();
+        reclassifyCurrentMessages();
+    }
+    emit smartTagEnabledChanged();
 }

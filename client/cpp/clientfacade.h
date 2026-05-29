@@ -38,6 +38,8 @@ class ClientFacade : public QObject
     Q_PROPERTY(int unreadMessageCount READ unreadMessageCount NOTIFY unreadMessageCountChanged)
     Q_PROPERTY(MessageListModel *messages READ messages CONSTANT)
     Q_PROPERTY(GroupListModel *groups READ groups CONSTANT)
+    // [Feature 2] 智能标签开关：QML 读写 ClientFacade.smartTagEnabled
+    Q_PROPERTY(bool smartTagEnabled READ smartTagEnabled WRITE setSmartTagEnabled NOTIFY smartTagEnabledChanged)
 
 public:
     explicit ClientFacade(QObject *parent = nullptr);
@@ -85,6 +87,9 @@ public:
     Q_INVOKABLE void leaveGroup(qint64 groupId);
     Q_INVOKABLE void refreshMyGroups();
     Q_INVOKABLE void fetchGroupInfo(qint64 groupId);
+    // [Feature 2] 智能标签开关
+    Q_INVOKABLE bool smartTagEnabled() const;
+    Q_INVOKABLE void setSmartTagEnabled(bool enabled);
 
 signals:
     void isLoggedInChanged();
@@ -116,6 +121,7 @@ signals:
                          const QVariantList &members);
     void sendMessageFinished(bool success, const QString &message);
     void chatHistoryLoaded();
+    void smartTagEnabledChanged();
 
 private:
     ClientSettings *settings_ = nullptr;

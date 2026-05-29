@@ -126,6 +126,8 @@ ClientFacade::ClientFacade(QObject *parent)
         emit groupListUpdated();
     });
     connect(conversations_, &ConversationListModel::totalUnreadChanged, this, &ClientFacade::unreadMessageCountChanged);
+    // [Feature 2] ChatService 开关变化 → 通知 QML
+    connect(chatService_, &ChatService::smartTagEnabledChanged, this, &ClientFacade::smartTagEnabledChanged);
 
     qInfo() << "ClientFacade ready"
             << settings_->serverHost() << settings_->serverPort()
@@ -347,5 +349,18 @@ void ClientFacade::fetchGroupInfo(qint64 groupId)
 {
     if (groupService_) {
         groupService_->fetchGroupInfo(groupId);
+    }
+}
+
+// [Feature 2] 智能标签开关：QML → ClientFacade → ChatService
+bool ClientFacade::smartTagEnabled() const
+{
+    return chatService_ ? chatService_->smartTagEnabled() : false;
+}
+
+void ClientFacade::setSmartTagEnabled(bool enabled)
+{
+    if (chatService_) {
+        chatService_->setSmartTagEnabled(enabled);
     }
 }

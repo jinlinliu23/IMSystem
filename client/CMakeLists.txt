@@ -45,6 +45,8 @@ set(CLIENT_SOURCES
     cpp/service/groupservice.cpp
     cpp/storage/chatlocalstore.h
     cpp/storage/chatlocalstore.cpp
+    cpp/ai/messageclassifier.h
+    cpp/ai/messageclassifier.cpp
 )
 
 qt_add_executable(appclient ${CLIENT_SOURCES})

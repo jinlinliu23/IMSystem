@@ -19,7 +19,10 @@ Page {
     readonly property color colorPeerText: "#333333"
     readonly property color colorInputBg: "#F5F5F5"
     readonly property color colorSendBtn: "#4A90D9"
+    // [Feature 2] 待办消息视图项背景色（浅蓝）
+    readonly property color colorTodoBubble: "#E3F2FD"
     readonly property int avatarSize: 36
+    property bool contextMenuOpen: false
 
     Component.onCompleted: {
         if (typeof ClientFacade !== "undefined") {
@@ -49,6 +52,7 @@ Page {
             }
         }
 
+        // [Feature 2] 右上角 "⋮" 更多操作按钮
         Text {
             text: "< 返回"
             font.pixelSize: 16
@@ -64,6 +68,68 @@ Page {
             font.pixelSize: 18
             color: "#333333"
             anchors.centerIn: parent
+        }
+
+        // [Feature 2] 右上角 "⋮" 更多操作按钮
+        Text {
+            text: "⋮"
+            font.pixelSize: 22
+            color: "#4A90D9"
+            anchors.right: parent.right
+            anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+
+            TapHandler {
+                onTapped: {
+                    contextMenuOpen = !contextMenuOpen
+                }
+            }
+        }
+    }
+
+    // [Feature 2] 下拉菜单：智能标签开关
+    Popup {
+        id: contextMenu
+        visible: contextMenuOpen
+        x: parent.width - width - 8
+        y: headerBar.height + 4
+        width: 200
+        padding: 0
+        modal: false
+        closePolicy: Popup.CloseOnPressOutside | Popup.CloseOnEscape
+
+        onClosed: contextMenuOpen = false
+
+        contentItem: Column {
+            width: parent.width
+
+            ItemDelegate {
+                width: parent.width
+                height: 42
+                contentItem: Row {
+                    spacing: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+
+                    Text {
+                        text: typeof ClientFacade !== "undefined" && ClientFacade.smartTagEnabled
+                              ? "关闭智能标签识别"
+                              : "开启智能标签识别"
+                        font.pixelSize: 14
+                        color: "#333333"
+                    }
+                }
+
+                TapHandler {
+                    onTapped: {
+                        if (typeof ClientFacade !== "undefined") {
+                            ClientFacade.setSmartTagEnabled(!ClientFacade.smartTagEnabled)
+                        }
+                        contextMenu.close()
+                    }
+                }
+            }
         }
     }
 
@@ -82,6 +148,10 @@ Page {
             id: msgRow
             width: messageList.width
             readonly property bool isMine: model.who === "me"
+            // [Feature 2] 判断该消息是否被分类器判定为待办
+            readonly property bool isTodo: typeof ClientFacade !== "undefined"
+                                          && ClientFacade.smartTagEnabled
+                                          && (model.todoScore || 0) > 0.55
             readonly property bool showSenderLabel: isGroup && !isMine && (model.senderName || "").length > 0
             readonly property string avatarNick: isMine
                 ? ((typeof ClientFacade !== "undefined" && ClientFacade.currentUser)
@@ -93,6 +163,13 @@ Page {
                 : ((model.senderAccount || "").length > 0 ? model.senderAccount : peerAccount)
 
             height: rowLayout.height + (showSenderLabel ? 20 : 0) + 4
+
+            // [Feature 2] 待办消息 → 整行背景浅蓝
+            Rectangle {
+                anchors.fill: parent
+                radius: 6
+                color: isTodo ? colorTodoBubble : "transparent"
+            }
 
             Text {
                 id: senderLabel
