@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(IM_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../common")
 set(CLIENT_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cpp")
+set(CPPJIEBA_DIR "${CLIENT_CPP_DIR}/ai/cppjieba")
 
 find_package(Qt6 REQUIRED COMPONENTS Quick Network Sql)
 
@@ -79,14 +80,37 @@ set_target_properties(appclient PROPERTIES
     WIN32_EXECUTABLE TRUE
 )
 
+# Android：指定 android/ 目录为包资源目录，Qt 会将 android/assets/ 打包进 APK
+if(ANDROID)
+    set_target_properties(appclient PROPERTIES
+        QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
+    )
+endif()
+
 target_include_directories(appclient PRIVATE
     ${IM_COMMON_DIR}
     ${CLIENT_CPP_DIR}
+    ${CPPJIEBA_DIR}/include
+    ${CPPJIEBA_DIR}/deps/limonp/include
 )
 
 target_link_libraries(appclient
     PRIVATE Qt6::Quick Qt6::Network Qt6::Sql
 )
+
+# 构建后复制 cppjieba 词库
+# 桌面端：复制到可执行文件同目录，运行时用 applicationDirPath() + "/dict/" 访问
+# Android：复制到 android/assets/dict/，由 Qt 打包进 APK，运行时从 assets 解压
+if(ANDROID)
+    file(COPY ${CPPJIEBA_DIR}/dict/
+         DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/android/assets/dict/")
+else()
+    add_custom_command(TARGET appclient POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CPPJIEBA_DIR}/dict
+        $<TARGET_FILE_DIR:appclient>/dict
+    )
+endif()
 
 # Android / 桌面部署 QSQLITE 驱动插件
 qt_import_plugins(appclient INCLUDE Qt6::QSQLiteDriverPlugin)

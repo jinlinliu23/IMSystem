@@ -5,7 +5,13 @@
 //
 // 阅读顺序：第 1 步，先看这里。
 // 这是一个朴素贝叶斯二分类器，中文消息 → 待办/非待办。
-// 不依赖任何外部库，纯 C++ 实现。
+//
+// 特征提取（三步）：
+//   1. cppjieba 分词 → 词级语义特征
+//   2. 正则检测 → __EXACT_DATE__（具体日期，强信号）/ __RELATIVE_TIME__（模糊时间，弱信号）
+//   3. 正则检测 → __TIME__（时间表达，含课程节次）
+//
+// 分词使用 cppjieba（header-only），CMake 自动引入。
 // ============================================================================
 
 #include <QHash>
@@ -15,23 +21,24 @@
 #include <QStringList>
 #include <QVector>
 
-// 分类结果：一条消息被判定为"待办"的结论
+namespace cppjieba {
+class Jieba;
+}
+
 struct Classification {
-    bool isTodo = false;       // 是否待办（置信度 >= 阈值时为 true）
-    double confidence = 0.0;   // P(待办|消息)，0.0~1.0
+    bool isTodo = false;
+    double confidence = 0.0;
 };
 
 class MessageClassifier
 {
 public:
     MessageClassifier();
+    ~MessageClassifier();
 
-    // 训练：输入 (文本, 标签) 列表，标签为 "todo" 或 "normal"
     void train(const QVector<QPair<QString, QString>> &samples);
-    // 分类：对单条文本做预测
     Classification classify(const QString &text) const;
 
-    // 模型持久化：保存为 JSON 文件，下次启动直接加载，避免重复训练
     bool save(const QString &path) const;
     bool load(const QString &path);
 
@@ -41,25 +48,27 @@ public:
     int vocabularySize() const { return vocabulary_.size(); }
 
     void clear();
-    // 种子训练数据：40 条中文例句，确保冷启动即可用
     static QVector<QPair<QString, QString>> seedSamples();
 
 private:
-    // 中文字符二元组提取："明天开会" → ["明天","天开","开会"]
-    QStringList extractBigrams(const QString &text) const;
+    // 特征提取：jieba 分词 + 日期/时间伪特征注入
+    // "6月9日下午3点开会" → ["下午","3","点","开会","__EXACT_DATE__","__TIME__"]
+    // "今天去超市"       → ["今天","去","超市","__RELATIVE_TIME__"]
+    QStringList extractFeatures(const QString &text) const;
 
     void ensureBuilt();
     void trainSingle(const QString &text, const QString &label);
-    // 核心公式：log P(label) + Σ log P(bigram|label)，加 Laplace 平滑
-    double classLogProb(const QString &label, const QStringList &bigrams) const;
+    double classLogProb(const QString &label, const QStringList &features) const;
 
-    // 训练状态
-    QHash<QString, int> classDocCount_;                         // 每类文档数 只有两类S
-    QHash<QString, int> classFeatureTotal_;                     // 每类特征总数 每个分词属于 两类 中的累计计数
-    QHash<QPair<QString, QString>, int> featureCount_;          // (类, bigram) 出现次数
-    QSet<QString> vocabulary_;                                  // 所有见过的 bigram
+    QHash<QString, int> classDocCount_;
+    QHash<QString, int> classFeatureTotal_;
+    QHash<QPair<QString, QString>, int> featureCount_;
+    QSet<QString> vocabulary_;
 
     bool trained_ = false;
-    static constexpr double kSmoothing = 1.0;                   // Laplace 平滑系数
-    static constexpr double kTodoThreshold = 0.55;              // 判定为待办的置信度阈值
+    static constexpr double kSmoothing = 1.0;
+    static constexpr double kTodoThreshold = 0.55;
+    static constexpr double kRelativeTimeFactor = 0.3;  // 弱补偿系数：__RELATIVE_TIME__只有全量的30%
+
+    cppjieba::Jieba *jieba_ = nullptr;
 };
