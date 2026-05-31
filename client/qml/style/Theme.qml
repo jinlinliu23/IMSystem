@@ -7,6 +7,6 @@ QtObject {
     property color bg: darkMode ? "#1e1e1e" : "#f5f5f5"
     property color text: darkMode ? "#e0e0e0" : "#1e1e1e"
     property color primary: "#007aff"
-    property color surface: darkMode ? "#f5f5f5" : "#ffffff"
-    property color border: darkMode ? "#f5f5f5" : "#e0e0e0" //"steelblue"
+    property color surface: darkMode ? "#f5f5f5" : "#F0F0F0"
+    property color border: darkMode ? "#f5f5f5" : "#e0e0e0"
 }

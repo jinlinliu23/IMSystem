@@ -31,7 +31,7 @@ Item {
             Text {
                 text: "登录"
                 font.pixelSize: 32
-                font.bold: true
+                font.weight: Font.DemiBold
                 color: theme ? theme.text : "#333"
                 anchors.horizontalCenter: parent.horizontalCenter
             }
@@ -44,22 +44,17 @@ Item {
                 text: "真机请填电脑 IP；与注册页使用同一服务器地址"
             }
 
-            Item {
+            Rectangle {
                 width: parent.width
                 height: 50
-                Rectangle {
-                    anchors.fill: parent
-                    color: theme ? theme.surface : "#fff"
-                    border.color: theme ? theme.border : "#ccc"
-                    border.width: 1
-                    radius: 8
-                }
+                color: "#FFFFFF"
+                radius: 8
                 TextInput {
                     id: serverHostInput
                     anchors.fill: parent
                     anchors.margins: 12
                     font.pixelSize: 16
-                    color: theme ? theme.text : "#333"
+                    color: "#333"
                     verticalAlignment: TextInput.AlignVCenter
                     inputMethodHints: Qt.ImhNoPredictiveText
                 }
@@ -70,25 +65,21 @@ Item {
                     anchors.left: parent.left
                     anchors.leftMargin: 14
                     color: "#aaa"
+                    font.pixelSize: 16
                 }
             }
 
-            Item {
+            Rectangle {
                 width: parent.width
                 height: 50
-                Rectangle {
-                    anchors.fill: parent
-                    color: theme ? theme.surface : "#fff"
-                    border.color: theme ? theme.border : "#ccc"
-                    border.width: 1
-                    radius: 8
-                }
+                color: "#FFFFFF"
+                radius: 8
                 TextInput {
                     id: serverPortInput
                     anchors.fill: parent
                     anchors.margins: 12
                     font.pixelSize: 16
-                    color: theme ? theme.text : "#333"
+                    color: "#333"
                     verticalAlignment: TextInput.AlignVCenter
                     inputMethodHints: Qt.ImhDigitsOnly
                 }
@@ -99,25 +90,21 @@ Item {
                     anchors.left: parent.left
                     anchors.leftMargin: 14
                     color: "#aaa"
+                    font.pixelSize: 16
                 }
             }
 
-            Item {
+            Rectangle {
                 width: parent.width
                 height: 50
-                Rectangle {
-                    anchors.fill: parent
-                    color: theme ? theme.surface : "#fff"
-                    border.color: theme ? theme.border : "#ccc"
-                    border.width: 1
-                    radius: 8
-                }
+                color: "#FFFFFF"
+                radius: 8
                 TextInput {
                     id: accountInput
                     anchors.fill: parent
                     anchors.margins: 12
                     font.pixelSize: 16
-                    color: theme ? theme.text : "#333"
+                    color: "#333"
                     verticalAlignment: TextInput.AlignVCenter
                     inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhPreferLatin
                 }
@@ -128,25 +115,21 @@ Item {
                     anchors.left: parent.left
                     anchors.leftMargin: 14
                     color: "#aaa"
+                    font.pixelSize: 16
                 }
             }
 
-            Item {
+            Rectangle {
                 width: parent.width
                 height: 50
-                Rectangle {
-                    anchors.fill: parent
-                    color: theme ? theme.surface : "#fff"
-                    border.color: theme ? theme.border : "#ccc"
-                    border.width: 1
-                    radius: 8
-                }
+                color: "#FFFFFF"
+                radius: 8
                 TextInput {
                     id: passwordInput
                     anchors.fill: parent
                     anchors.margins: 12
                     font.pixelSize: 16
-                    color: theme ? theme.text : "#333"
+                    color: "#333"
                     echoMode: TextInput.Password
                     verticalAlignment: TextInput.AlignVCenter
                 }
@@ -157,12 +140,13 @@ Item {
                     anchors.left: parent.left
                     anchors.leftMargin: 14
                     color: "#aaa"
+                    font.pixelSize: 16
                 }
             }
 
             Rectangle {
                 width: parent.width
-                height: 50
+                height: 52
                 radius: 8
                 color: (typeof ClientFacade !== "undefined" && ClientFacade.busy)
                        ? "#9bb8d9" : (theme ? theme.primary : "#4a90d9")
@@ -171,7 +155,7 @@ Item {
                     text: (typeof ClientFacade !== "undefined" && ClientFacade.busy) ? "登录中..." : "登录"
                     color: "#fff"
                     font.pixelSize: 18
-                    font.bold: true
+                    font.weight: Font.DemiBold
                 }
                 TapHandler {
                     enabled: typeof ClientFacade !== "undefined" && !ClientFacade.busy

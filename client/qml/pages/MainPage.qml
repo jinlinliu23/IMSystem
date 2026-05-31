@@ -39,12 +39,23 @@ Item {
         visible: curTab === 2
     }
 
+    // [Feature 1] 个人事务管家
+    TaskPage {
+        id: taskPage
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: taskPage.detailOpen ? parent.bottom : tabBar.top
+        visible: curTab === 3
+    }
+
     Item {
         id: tabBar
         height: 56
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
+        visible: !taskPage.detailOpen
 
         Rectangle {
             anchors.fill: parent
@@ -60,11 +71,12 @@ Item {
                 model: [
                     { name: "消息", idx: 0, badgeCount: unreadMessageCount },
                     { name: "联系人", idx: 1, badgeCount: notificationCount },
+                    { name: "事务", idx: 3, badgeCount: 0 },
                     { name: "我", idx: 2, badgeCount: 0 }
                 ]
 
                 Item {
-                    width: tabBar.width / 3
+                    width: tabBar.width / 4
                     height: tabBar.height
 
                     Rectangle {

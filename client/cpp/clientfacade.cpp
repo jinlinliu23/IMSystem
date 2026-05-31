@@ -1,17 +1,21 @@
 #include "clientfacade.h"
 
+#include "ai/messageclassifier.h"
+#include "ai/taskextractor.h"
 #include "core/clientsettings.h"
 #include "model/contactlistmodel.h"
 #include "model/conversationlistmodel.h"
 #include "model/currentusermodel.h"
 #include "model/friendrequestlistmodel.h"
 #include "model/messagelistmodel.h"
+#include "model/tasklistmodel.h"
 #include "model/grouplistmodel.h"
 #include "network/clientmessagerouter.h"
 #include "service/authservice.h"
 #include "service/chatservice.h"
 #include "service/contactservice.h"
 #include "service/groupservice.h"
+#include "storage/chatlocalstore.h"
 
 #include <QDebug>
 
@@ -25,6 +29,7 @@ ClientFacade::ClientFacade(QObject *parent)
     , friendRequests_(new FriendRequestListModel(this))
     , messages_(new MessageListModel(this))
     , groups_(new GroupListModel(this))
+    , tasks_(new TaskListModel(this))
     , authService_(new AuthService(settings_, currentUser_, router_, this))
     , chatService_(new ChatService(settings_, currentUser_, router_, conversations_, messages_, contacts_, this))
     , contactService_(new ContactService(settings_,
@@ -251,6 +256,14 @@ void ClientFacade::onAuthSessionReady()
     if (groupService_) {
         groupService_->refreshMyGroupsDeferred();
     }
+    // [Feature 1] 设置 TaskListModel 的 store 和 extractor
+    if (tasks_ && chatService_ && chatService_->localStore()) {
+        tasks_->setStore(chatService_->localStore());
+        if (chatService_->classifier()) {
+            tasks_->setExtractor(new TaskExtractor(chatService_->classifier()->jieba()));
+        }
+        tasks_->reload();
+    }
 }
 
 void ClientFacade::resumeSession()
@@ -362,5 +375,31 @@ void ClientFacade::setSmartTagEnabled(bool enabled)
 {
     if (chatService_) {
         chatService_->setSmartTagEnabled(enabled);
+    }
+}
+
+// [Feature 1] 个人事务管家
+void ClientFacade::markAsTask(const QString &conversationId, const QString &peerAccount,
+                              const QString &text, const QString &senderName)
+{
+    if (chatService_ && chatService_->localStore()) {
+        chatService_->localStore()->insertTask(conversationId, peerAccount, text, senderName);
+        if (tasks_) {
+            tasks_->reload();
+        }
+    }
+}
+
+void ClientFacade::extractTasks()
+{
+    if (tasks_) {
+        tasks_->extractAll();
+    }
+}
+
+void ClientFacade::reloadTasks()
+{
+    if (tasks_) {
+        tasks_->reload();
     }
 }

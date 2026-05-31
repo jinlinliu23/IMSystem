@@ -31,43 +31,26 @@ Item {
             Text {
                 text: "注册"
                 font.pixelSize: 32
-                font.bold: true
+                font.weight: Font.DemiBold
                 color: theme ? theme.text : "#333"
                 anchors.horizontalCenter: parent.horizontalCenter
             }
 
-            Text {
-                width: parent.width
-                wrapMode: Text.WordWrap
-                font.pixelSize: 12
-                color: "#888"
-                text: "真机请填电脑局域网 IP（如 192.168.1.5）；模拟器用 10.0.2.2"
-            }
-
-            // 服务器 IP
-            Item {
+            Rectangle {
                 width: parent.width
                 height: 50
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: theme ? theme.surface : "#fff"
-                    border.color: theme ? theme.border : "#ccc"
-                    border.width: 1
-                    radius: 8
-                }
-
+                color: "#FFFFFF"
+                radius: 8
                 TextInput {
                     id: serverHostInput
                     anchors.fill: parent
                     anchors.margins: 12
                     font.pixelSize: 16
-                    color: theme ? theme.text : "#333"
+                    color: "#333"
                     clip: true
                     verticalAlignment: TextInput.AlignVCenter
                     inputMethodHints: Qt.ImhNoPredictiveText
                 }
-
                 Text {
                     text: "服务器 IP"
                     visible: !serverHostInput.text && !serverHostInput.activeFocus
@@ -79,30 +62,21 @@ Item {
                 }
             }
 
-            // 服务器端口
-            Item {
+            Rectangle {
                 width: parent.width
                 height: 50
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: theme ? theme.surface : "#fff"
-                    border.color: theme ? theme.border : "#ccc"
-                    border.width: 1
-                    radius: 8
-                }
-
+                color: "#FFFFFF"
+                radius: 8
                 TextInput {
                     id: serverPortInput
                     anchors.fill: parent
                     anchors.margins: 12
                     font.pixelSize: 16
-                    color: theme ? theme.text : "#333"
+                    color: "#333"
                     clip: true
                     verticalAlignment: TextInput.AlignVCenter
                     inputMethodHints: Qt.ImhDigitsOnly
                 }
-
                 Text {
                     text: "端口 (16701)"
                     visible: !serverPortInput.text && !serverPortInput.activeFocus
@@ -114,104 +88,72 @@ Item {
                 }
             }
 
-            Item {
+            Rectangle {
                 width: parent.width
                 height: 50
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: theme ? theme.surface : "#fff"
-                    border.color: theme ? theme.border : "#ccc"
-                    border.width: 1
-                    radius: 8
-                }
-
+                color: "#FFFFFF"
+                radius: 8
                 TextInput {
                     id: nicknameInput
                     anchors.fill: parent
                     anchors.margins: 12
                     font.pixelSize: 16
-                    color: theme ? theme.text : "#333"
+                    color: "#333"
                     clip: true
                     verticalAlignment: TextInput.AlignVCenter
                 }
-
                 Text {
-                    text: "昵称（展示名，可日后修改）"
+                    text: "昵称"
                     visible: !nicknameInput.text && !nicknameInput.activeFocus
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
                     anchors.leftMargin: 14
                     color: "#aaa"
-                    font.pixelSize: 14
+                    font.pixelSize: 16
                 }
             }
 
-            Item {
+            Rectangle {
                 width: parent.width
                 height: 50
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: theme ? theme.surface : "#fff"
-                    border.color: theme ? theme.border : "#ccc"
-                    border.width: 1
-                    radius: 8
-                }
-
+                color: "#FFFFFF"
+                radius: 8
                 TextInput {
                     id: accountInput
                     anchors.fill: parent
                     anchors.margins: 12
                     font.pixelSize: 16
-                    color: theme ? theme.text : "#333"
+                    color: "#333"
                     clip: true
                     verticalAlignment: TextInput.AlignVCenter
                     inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhPreferLatin
                 }
-
                 Text {
-                    text: "账号（唯一，类似微信号）"
+                    text: "账号"
                     visible: !accountInput.text && !accountInput.activeFocus
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
                     anchors.leftMargin: 14
                     color: "#aaa"
-                    font.pixelSize: 14
+                    font.pixelSize: 16
                 }
             }
 
-            Text {
-                width: parent.width
-                wrapMode: Text.WordWrap
-                font.pixelSize: 11
-                color: "#999"
-                text: "账号用于登录，全站唯一且区分大小写（Alice 与 alice 不同）；若已被占用请换一个"
-            }
-
-            Item {
+            Rectangle {
                 width: parent.width
                 height: 50
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: theme ? theme.surface : "#fff"
-                    border.color: theme ? theme.border : "#ccc"
-                    border.width: 1
-                    radius: 8
-                }
-
+                color: "#FFFFFF"
+                radius: 8
                 TextInput {
                     id: passwordInput
                     anchors.fill: parent
                     anchors.margins: 12
                     font.pixelSize: 16
-                    color: theme ? theme.text : "#333"
+                    color: "#333"
                     echoMode: TextInput.Password
                     clip: true
                     verticalAlignment: TextInput.AlignVCenter
                 }
-
                 Text {
                     text: "密码"
                     visible: !passwordInput.text && !passwordInput.activeFocus
@@ -225,20 +167,18 @@ Item {
 
             Rectangle {
                 width: parent.width
-                height: 50
+                height: 52
                 radius: 8
                 color: (typeof ClientFacade !== "undefined" && ClientFacade.busy)
                        ? "#9bb8d9"
                        : (theme ? theme.primary : "#4a90d9")
-
                 Text {
                     anchors.centerIn: parent
                     text: (typeof ClientFacade !== "undefined" && ClientFacade.busy) ? "注册中..." : "注册"
                     color: "#fff"
                     font.pixelSize: 18
-                    font.bold: true
+                    font.weight: Font.DemiBold
                 }
-
                 TapHandler {
                     enabled: typeof ClientFacade !== "undefined" && !ClientFacade.busy
                     onTapped: {
@@ -247,11 +187,11 @@ Item {
                             return
                         }
                         applyServerSettings()
-                    ClientFacade.registerUser(
-                        nicknameInput.text,
-                        accountInput.text,
-                        passwordInput.text
-                    )
+                        ClientFacade.registerUser(
+                            nicknameInput.text,
+                            accountInput.text,
+                            passwordInput.text
+                        )
                     }
                 }
             }
@@ -261,10 +201,7 @@ Item {
                 color: theme ? theme.primary : "#4a90d9"
                 font.pixelSize: 14
                 anchors.horizontalCenter: parent.horizontalCenter
-
-                TapHandler {
-                    onTapped: nav.pop()
-                }
+                TapHandler { onTapped: nav.pop() }
             }
         }
     }

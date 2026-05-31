@@ -48,6 +48,10 @@ set(CLIENT_SOURCES
     cpp/storage/chatlocalstore.cpp
     cpp/ai/messageclassifier.h
     cpp/ai/messageclassifier.cpp
+    cpp/ai/taskextractor.h
+    cpp/ai/taskextractor.cpp
+    cpp/model/tasklistmodel.h
+    cpp/model/tasklistmodel.cpp
 )
 
 qt_add_executable(appclient ${CLIENT_SOURCES})
@@ -70,6 +74,7 @@ qt_add_qml_module(appclient
         QML_FILES qml/pages/CreateGroupPage.qml
         QML_FILES qml/pages/GroupInfoPage.qml
         QML_FILES qml/pages/InviteMemberPage.qml
+        QML_FILES qml/pages/TaskPage.qml
         QML_FILES qml/components/ImAvatar.qml
 )
 

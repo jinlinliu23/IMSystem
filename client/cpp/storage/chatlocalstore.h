@@ -33,6 +33,21 @@ struct ChatConversationInfo {
     int unreadCount = 0;
 };
 
+// [Feature 1] 用户标记的待办事项
+struct UserTask {
+    int id = 0;
+    QString conversationId;
+    QString peerAccount;
+    QString originalText;
+    QString fromNickname;
+    QString extractedAction;
+    QString extractedTime;
+    QString extractedPlace;
+    bool isCompleted = false;
+    bool aiProcessed = false;
+    qint64 createdAt = 0;
+};
+
 /**
  * @brief 客户端本地聊天记录（Qt Sql + QSQLITE，按登录账号分库）
  */
@@ -73,6 +88,15 @@ public:
     bool setUnreadCount(const QString &conversationId, int count);
     bool incrementUnread(const QString &conversationId);
     QVector<ChatConversationInfo> listConversations() const;
+
+    // [Feature 1] 用户待办事项 CRUD
+    bool insertTask(const QString &conversationId, const QString &peerAccount,
+                    const QString &originalText, const QString &fromNickname = QString());
+    bool removeTask(int taskId);
+    bool setTaskCompleted(int taskId, bool completed);
+    bool updateTaskExtracted(int taskId, const QString &action,
+                             const QString &time, const QString &place);
+    QVector<UserTask> listTasks() const;
 
 private:
     bool ensureSchema();

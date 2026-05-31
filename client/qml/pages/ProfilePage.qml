@@ -3,55 +3,106 @@ import QtQuick.Controls
 
 Item {
     anchors.fill: parent
-    property var theme: appWindow.theme
+    property var t: appWindow.theme
+
+    readonly property string currentNickname:
+        (typeof ClientFacade !== "undefined" && ClientFacade.currentUser)
+        ? ClientFacade.currentUser.nickname : ""
+    readonly property string currentAccount:
+        (typeof ClientFacade !== "undefined" && ClientFacade.currentUser)
+        ? ClientFacade.currentUser.account : ""
+
+    Rectangle {
+        anchors.fill: parent
+        color: "#EDEDED"
+    }
 
     Column {
-        anchors.centerIn: parent
+        anchors.fill: parent
+        anchors.topMargin: 12
         spacing: 12
-        width: parent.width * 0.8
 
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: (typeof ClientFacade !== "undefined" && ClientFacade.currentUser)
-                  ? ClientFacade.currentUser.nickname : ""
-            font.pixelSize: 24
-            font.bold: true
-            color: theme ? theme.text : "#333"
-        }
-
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: (typeof ClientFacade !== "undefined" && ClientFacade.currentUser)
-                  ? ("账号：" + ClientFacade.currentUser.account) : ""
-            font.pixelSize: 15
-            color: theme ? theme.text : "#555"
-        }
-
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: (typeof ClientFacade !== "undefined" && ClientFacade.currentUser)
-                  ? ("ID：" + ClientFacade.currentUser.userId) : ""
-            font.pixelSize: 12
-            color: "#888"
-        }
-
-        Text {
+        Rectangle {
             width: parent.width
-            wrapMode: Text.WordWrap
-            horizontalAlignment: Text.AlignHCenter
-            font.pixelSize: 11
-            color: "#aaa"
-            text: "昵称后续可支持修改；账号为唯一标识"
+            height: 84
+            color: "#FFFFFF"
+
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 16
+                spacing: 14
+
+                ImAvatar {
+                    size: 56
+                    displayName: currentNickname
+                    seed: currentAccount
+                    themePrimary: t.primary
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 6
+
+                    Text {
+                        text: currentNickname
+                        font.pixelSize: 18
+                        color: "#1a1a1a"
+                    }
+
+                    Text {
+                        text: "账号：" + currentAccount
+                        font.pixelSize: 13
+                        color: "#999"
+                    }
+                }
+            }
         }
 
-        Button {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: "退出登录"
+        Rectangle {
             width: parent.width
-            onClicked: {
-                if (typeof ClientFacade !== "undefined") {
-                    ClientFacade.logout()
-                    appWindow.nav.replace("LoginPage")
+            height: 44
+            color: "#FFFFFF"
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: 0.5
+                color: "#E5E5E5"
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 16
+                text: "退出登录"
+                font.pixelSize: 16
+                color: "#1a1a1a"
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.right: parent.right
+                anchors.rightMargin: 16
+                text: ">"
+                font.pixelSize: 16
+                color: "#C7C7CC"
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: logoutTap.pressed ? "#EDEDED" : "transparent"
+            }
+
+            TapHandler {
+                id: logoutTap
+                onTapped: {
+                    if (typeof ClientFacade !== "undefined") {
+                        ClientFacade.logout()
+                        appWindow.nav.replace("LoginPage")
+                    }
                 }
             }
         }

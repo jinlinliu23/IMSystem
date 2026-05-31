@@ -49,6 +49,10 @@ public:
     Q_INVOKABLE void markGroupDissolved(qint64 groupId, const QString &groupName);
     void clearSession();
 
+    ChatLocalStore *localStore() const { return localStore_; }
+    MessageClassifier *classifier() const { return classifier_; }
+    // MessageClassifier 前向声明在 ai/messageclassifier.h
+
     // [Feature 2] 智能标签开关
     bool smartTagEnabled() const { return smartTagEnabled_; }
     Q_INVOKABLE void setSmartTagEnabled(bool enabled);

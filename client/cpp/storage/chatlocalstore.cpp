@@ -90,6 +90,117 @@ bool ChatLocalStore::openForAccount(const QString &ownerAccount)
     return true;
 }
 
+// ============================================================================
+// [Feature 1] 用户待办事项 CRUD
+// ============================================================================
+
+bool ChatLocalStore::insertTask(const QString &conversationId, const QString &peerAccount,
+                                const QString &originalText, const QString &fromNickname)
+{
+    QSqlDatabase db = database();
+    if (!db.isValid() || !db.isOpen() || ownerAccount_.isEmpty()) return false;
+    if (originalText.isEmpty()) return false;
+
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral(
+        "INSERT OR IGNORE INTO user_tasks "
+        "(owner_account, conversation_id, peer_account, original_text, from_nickname, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)"));
+    q.addBindValue(ownerAccount_);
+    q.addBindValue(conversationId);
+    q.addBindValue(peerAccount);
+    q.addBindValue(originalText);
+    q.addBindValue(fromNickname);
+    q.addBindValue(QDateTime::currentSecsSinceEpoch());
+
+    if (!q.exec()) {
+        qWarning() << "ChatLocalStore insertTask:" << q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool ChatLocalStore::removeTask(int taskId)
+{
+    QSqlDatabase db = database();
+    if (!db.isValid() || !db.isOpen() || ownerAccount_.isEmpty()) return false;
+
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral(
+        "DELETE FROM user_tasks WHERE id = ? AND owner_account = ?"));
+    q.addBindValue(taskId);
+    q.addBindValue(ownerAccount_);
+    return q.exec();
+}
+
+bool ChatLocalStore::setTaskCompleted(int taskId, bool completed)
+{
+    QSqlDatabase db = database();
+    if (!db.isValid() || !db.isOpen() || ownerAccount_.isEmpty()) return false;
+
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral(
+        "UPDATE user_tasks SET is_completed = ? WHERE id = ? AND owner_account = ?"));
+    q.addBindValue(completed ? 1 : 0);
+    q.addBindValue(taskId);
+    q.addBindValue(ownerAccount_);
+    return q.exec();
+}
+
+bool ChatLocalStore::updateTaskExtracted(int taskId, const QString &action,
+                                         const QString &time, const QString &place)
+{
+    QSqlDatabase db = database();
+    if (!db.isValid() || !db.isOpen() || ownerAccount_.isEmpty()) return false;
+
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral(
+        "UPDATE user_tasks SET extracted_action = ?, extracted_time = ?, "
+        "extracted_place = ?, ai_processed = 1 WHERE id = ? AND owner_account = ?"));
+    q.addBindValue(action);
+    q.addBindValue(time);
+    q.addBindValue(place);
+    q.addBindValue(taskId);
+    q.addBindValue(ownerAccount_);
+    return q.exec();
+}
+
+QVector<UserTask> ChatLocalStore::listTasks() const
+{
+    QVector<UserTask> result;
+    QSqlDatabase db = database();
+    if (!db.isValid() || !db.isOpen() || ownerAccount_.isEmpty()) return result;
+
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral(
+        "SELECT id, conversation_id, peer_account, original_text, from_nickname, "
+        "extracted_action, extracted_time, extracted_place, is_completed, ai_processed, created_at "
+        "FROM user_tasks WHERE owner_account = ? ORDER BY is_completed ASC, created_at DESC"));
+    q.addBindValue(ownerAccount_);
+
+    if (!q.exec()) {
+        qWarning() << "ChatLocalStore listTasks:" << q.lastError().text();
+        return result;
+    }
+
+    while (q.next()) {
+        UserTask t;
+        t.id = q.value(0).toInt();
+        t.conversationId = q.value(1).toString();
+        t.peerAccount = q.value(2).toString();
+        t.originalText = q.value(3).toString();
+        t.fromNickname = q.value(4).toString();
+        t.extractedAction = q.value(5).toString();
+        t.extractedTime = q.value(6).toString();
+        t.extractedPlace = q.value(7).toString();
+        t.isCompleted = q.value(8).toInt() != 0;
+        t.aiProcessed = q.value(9).toInt() != 0;
+        t.createdAt = q.value(10).toLongLong();
+        result.append(t);
+    }
+    return result;
+}
+
 void ChatLocalStore::close()
 {
     if (!connectionName_.isEmpty() && QSqlDatabase::contains(connectionName_)) {
@@ -157,6 +268,45 @@ bool ChatLocalStore::ensureSchema()
             "CREATE INDEX IF NOT EXISTS idx_chat_conversations_owner "
             "ON chat_conversations(owner_account, is_group, last_message_at DESC);"))) {
         qWarning() << "ChatLocalStore conv index:" << q.lastError().text();
+        return false;
+    }
+
+    // [Feature 1] user_tasks 待办事项表
+    if (!q.exec(QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS user_tasks ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  owner_account TEXT NOT NULL,"
+            "  conversation_id TEXT NOT NULL,"
+            "  peer_account TEXT NOT NULL,"
+            "  original_text TEXT NOT NULL DEFAULT '',"
+            "  from_nickname TEXT NOT NULL DEFAULT '',"
+            "  extracted_action TEXT NOT NULL DEFAULT '',"
+            "  extracted_time TEXT NOT NULL DEFAULT '',"
+            "  extracted_place TEXT NOT NULL DEFAULT '',"
+            "  is_completed INTEGER NOT NULL DEFAULT 0,"
+            "  ai_processed INTEGER NOT NULL DEFAULT 0,"
+            "  created_at INTEGER NOT NULL DEFAULT 0,"
+            "  UNIQUE(owner_account, peer_account, original_text)"
+            ");"))) {
+        qWarning() << "ChatLocalStore tasks schema:" << q.lastError().text();
+        return false;
+    }
+
+    // 迁移：加 from_nickname 列（如果从旧版本升级）
+    bool hasFromNickCol = false;
+    QSqlQuery pragmaTasks(db);
+    if (pragmaTasks.exec(QStringLiteral("PRAGMA table_info(user_tasks)"))) {
+        while (pragmaTasks.next()) {
+            if (pragmaTasks.value(1).toString() == QStringLiteral("from_nickname")) {
+                hasFromNickCol = true;
+                break;
+            }
+        }
+    }
+    if (!hasFromNickCol
+        && !q.exec(QStringLiteral(
+               "ALTER TABLE user_tasks ADD COLUMN from_nickname TEXT NOT NULL DEFAULT ''"))) {
+        qWarning() << "ChatLocalStore migrate from_nickname on user_tasks:" << q.lastError().text();
         return false;
     }
 

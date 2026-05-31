@@ -47,7 +47,7 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: 18
-                    color: plusTap.pressed ? "#e0e0e0" : "white"
+                    color: plusTap.pressed ? "#E0E0E0" : "transparent"
                 }
 
                 Text {
@@ -55,18 +55,6 @@ Item {
                     font.pixelSize: 15
                     color: t.primary
                     anchors.centerIn: parent
-                }
-
-                Rectangle {
-                    width: 8
-                    height: 8
-                    radius: 4
-                    color: "#e74c3c"
-                    visible: notificationCount > 0
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.rightMargin: 2
-                    anchors.topMargin: 2
                 }
 
                 TapHandler {

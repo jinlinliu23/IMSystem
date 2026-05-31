@@ -21,8 +21,13 @@ Page {
     readonly property color colorSendBtn: "#4A90D9"
     // [Feature 2] 待办消息视图项背景色（浅蓝）
     readonly property color colorTodoBubble: "#E3F2FD"
-    readonly property int avatarSize: 36
+    readonly property int avatarSize: 42
+    readonly property string conversationId: isGroup ? ("g:" + groupId) : peerAccount
     property bool contextMenuOpen: false
+    property bool taskMenuOpen: false
+    property int taskMenuIndex: -1
+    property string taskMenuText: ""
+    property string taskMenuSender: ""
 
     Component.onCompleted: {
         if (typeof ClientFacade !== "undefined") {
@@ -139,7 +144,6 @@ Page {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: inputBar.top
-        anchors.bottomMargin: 8
         clip: true
         spacing: 12
         model: (typeof ClientFacade !== "undefined") ? ClientFacade.messages : null
@@ -148,7 +152,6 @@ Page {
             id: msgRow
             width: messageList.width
             readonly property bool isMine: model.who === "me"
-            // [Feature 2] 判断该消息是否被分类器判定为待办
             readonly property bool isTodo: typeof ClientFacade !== "undefined"
                                           && ClientFacade.smartTagEnabled
                                           && (model.todoScore || 0) > 0.55
@@ -185,8 +188,8 @@ Page {
 
             Row {
                 id: rowLayout
-                anchors.top: showSenderLabel ? senderLabel.bottom : parent.top
-                anchors.topMargin: showSenderLabel ? 4 : 0
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: showSenderLabel ? 12 : 0
                 anchors.left: isMine ? undefined : parent.left
                 anchors.right: isMine ? parent.right : undefined
                 anchors.leftMargin: isMine ? 0 : 12
@@ -229,9 +232,60 @@ Page {
                     themePrimary: theme ? theme.primary : "#4A90D9"
                 }
             }
+
+            // [Feature 1] 长按消息 → 设为代办
+            TapHandler {
+                onLongPressed: {
+                    taskMenuText = model.text
+                    taskMenuSender = model.senderName || ""
+                    if (taskMenuSender.length === 0) {
+                        if (typeof ClientFacade !== "undefined" && ClientFacade.currentUser)
+                            taskMenuSender = ClientFacade.currentUser.nickname
+                    }
+                    taskMenuOpen = true
+                }
+            }
         }
 
         onCountChanged: if (count > 0) positionViewAtEnd()
+    }
+
+    // [Feature 1] 长按消息弹出菜单：设为代办
+    Popup {
+        id: taskMenu
+        visible: taskMenuOpen
+        x: (parent.width - width) / 2
+        y: parent.height / 2 - height
+        width: 160
+        padding: 0
+        modal: true
+        closePolicy: Popup.CloseOnPressOutside | Popup.CloseOnEscape
+
+        onClosed: taskMenuOpen = false
+
+        contentItem: Column {
+            width: parent.width
+
+            ItemDelegate {
+                width: parent.width
+                height: 44
+                contentItem: Text {
+                    text: "设为代办"
+                    font.pixelSize: 15
+                    color: "#333333"
+                    anchors.centerIn: parent
+                }
+
+                TapHandler {
+                    onTapped: {
+                        taskMenuOpen = false
+                        if (typeof ClientFacade !== "undefined" && taskMenuText !== "") {
+                            ClientFacade.markAsTask(conversationId, peerAccount, taskMenuText, taskMenuSender)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     Item {
@@ -254,7 +308,8 @@ Page {
         }
 
         Row {
-            anchors.fill: parent
+            anchors.left: parent.left
+            anchors.right: parent.right
             anchors.leftMargin: 12
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter

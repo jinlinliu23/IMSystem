@@ -6,6 +6,7 @@
 #include "model/friendrequestlistmodel.h"
 #include "model/grouplistmodel.h"
 #include "model/messagelistmodel.h"
+#include "model/tasklistmodel.h"
 
 #include <QObject>
 #include <QString>
@@ -38,6 +39,7 @@ class ClientFacade : public QObject
     Q_PROPERTY(int unreadMessageCount READ unreadMessageCount NOTIFY unreadMessageCountChanged)
     Q_PROPERTY(MessageListModel *messages READ messages CONSTANT)
     Q_PROPERTY(GroupListModel *groups READ groups CONSTANT)
+    Q_PROPERTY(TaskListModel *tasks READ tasks CONSTANT)
     // [Feature 2] 智能标签开关：QML 读写 ClientFacade.smartTagEnabled
     Q_PROPERTY(bool smartTagEnabled READ smartTagEnabled WRITE setSmartTagEnabled NOTIFY smartTagEnabledChanged)
 
@@ -60,6 +62,7 @@ public:
     int unreadMessageCount() const;
     MessageListModel *messages() const { return messages_; }
     GroupListModel *groups() const { return groups_; }
+    TaskListModel *tasks() const { return tasks_; }
 
     void setServerHost(const QString &host);
     void setServerPort(int port);
@@ -90,6 +93,12 @@ public:
     // [Feature 2] 智能标签开关
     Q_INVOKABLE bool smartTagEnabled() const;
     Q_INVOKABLE void setSmartTagEnabled(bool enabled);
+
+    // [Feature 1] 个人事务管家
+    Q_INVOKABLE void markAsTask(const QString &conversationId, const QString &peerAccount,
+                                const QString &text, const QString &senderName = QString());
+    Q_INVOKABLE void extractTasks();
+    Q_INVOKABLE void reloadTasks();
 
 signals:
     void isLoggedInChanged();
@@ -132,6 +141,7 @@ private:
     FriendRequestListModel *friendRequests_ = nullptr;
     MessageListModel *messages_ = nullptr;
     GroupListModel *groups_ = nullptr;
+    TaskListModel *tasks_ = nullptr;
     AuthService *authService_ = nullptr;
     ChatService *chatService_ = nullptr;
     ContactService *contactService_ = nullptr;

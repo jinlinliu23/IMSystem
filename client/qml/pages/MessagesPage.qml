@@ -7,8 +7,10 @@ Item {
     property var n: appWindow.nav
     property var t: appWindow.theme
 
-    readonly property int pendingRequestCount:
-        (typeof ClientFacade !== "undefined") ? ClientFacade.pendingFriendRequestCount : 0
+    Rectangle {
+        anchors.fill: parent
+        color: "#FFFFFF"
+    }
     Item {
         id: header
         height: 48
@@ -42,7 +44,7 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: 18
-                    color: plusTap.pressed ? "#e0e0e0" : "white"
+                    color: plusTap.pressed ? "#E0E0E0" : "transparent"
                 }
 
                 Text {
@@ -50,18 +52,6 @@ Item {
                     font.pixelSize: 15
                     color: t.primary
                     anchors.centerIn: parent
-                }
-
-                Rectangle {
-                    width: 8
-                    height: 8
-                    radius: 4
-                    color: "#e74c3c"
-                    visible: pendingRequestCount > 0
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.rightMargin: 2
-                    anchors.topMargin: 2
                 }
 
                 TapHandler {
@@ -88,7 +78,7 @@ Item {
 
             Rectangle {
                 anchors.fill: parent
-                color: listTap.pressed ? "lightgrey" : "transparent"
+                color: listTap.pressed ? "#F5F5F5" : "transparent"
             }
 
             Row {
@@ -117,9 +107,9 @@ Item {
                         width: parent.width
                         text: model.dissolved ? "该群已解散" : model.last
                         font.pixelSize: 13
-                        font.bold: model.hasUnread && !model.dissolved
                         color: model.dissolved ? "#c0392b" : (model.hasUnread ? "#333" : "#999")
                         elide: Text.ElideRight
+                        maximumLineCount: 1
                     }
                 }
             }
@@ -204,7 +194,7 @@ Item {
                 height: parent.height / 2
                 Rectangle {
                     anchors.fill: parent
-                    color: createGroupTap.pressed ? "grey" : "white"
+                    color: createGroupTap.pressed ? "#E0E0E0" : "transparent"
                     radius: 4
                 }
                 Text {
@@ -234,7 +224,7 @@ Item {
                 height: parent.height / 2
                 Rectangle {
                     anchors.fill: parent
-                    color: addFriendTap.pressed ? "grey" : "white"
+                    color: addFriendTap.pressed ? "#E0E0E0" : "transparent"
                     radius: 4
                 }
                 Text {

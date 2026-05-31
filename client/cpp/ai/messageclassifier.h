@@ -47,6 +47,9 @@ public:
     int normalSampleCount() const { return classDocCount_.value(QStringLiteral("normal"), 0); }
     int vocabularySize() const { return vocabulary_.size(); }
 
+    // 暴露 jieba 实例供 TaskExtractor 复用
+    cppjieba::Jieba *jieba() const { return jieba_; }
+
     void clear();
     static QVector<QPair<QString, QString>> seedSamples();
 
